@@ -14,6 +14,7 @@ from pathlib import Path
 HERE = Path(__file__).parent
 sys.path.insert(0, str(HERE))
 from lib.cache import read_task_output, market_status  # noqa: E402
+from lib.report_paths import build_report_dir  # noqa: E402
 
 ROOT = HERE.parent
 TEMPLATE = ROOT / "assets" / "report-template.html"
@@ -571,8 +572,7 @@ def assemble(ticker: str) -> Path:
         _render_style_chip(syn),
     )
 
-    date = datetime.now().strftime("%Y%m%d")
-    out_dir = Path("reports") / f"{ticker}_{date}"
+    out_dir = build_report_dir("reports", ticker, name=syn.get("name"))
     out_dir.mkdir(parents=True, exist_ok=True)
     out_file = out_dir / "full-report.html"
     out_file.write_text(template, encoding="utf-8")

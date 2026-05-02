@@ -10,13 +10,13 @@ from __future__ import annotations
 import base64
 import re
 import sys
-from datetime import datetime
 from pathlib import Path
+
+from lib.report_paths import build_report_dir
 
 
 def main(ticker: str) -> Path:
-    date = datetime.now().strftime("%Y%m%d")
-    report_dir = Path("reports") / f"{ticker}_{date}"
+    report_dir = build_report_dir("reports", ticker)
     if not report_dir.exists():
         # try any matching dir
         candidates = list(Path("reports").glob(f"{ticker}_*"))

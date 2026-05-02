@@ -6,8 +6,9 @@ Requires: pip install playwright && playwright install chromium
 from __future__ import annotations
 
 import sys
-from datetime import datetime
 from pathlib import Path
+
+from lib.report_paths import build_report_dir
 
 try:
     from playwright.sync_api import sync_playwright
@@ -17,8 +18,7 @@ except ImportError:
 
 
 def render(ticker: str, selector: str = "#share-card", out_name: str = "share-card.png", scale: int = 2) -> Path:
-    date = datetime.now().strftime("%Y%m%d")
-    report_dir = Path("reports") / f"{ticker}_{date}"
+    report_dir = build_report_dir("reports", ticker)
     html_path = report_dir / "full-report.html"
     if not html_path.exists():
         raise FileNotFoundError(f"{html_path} not found. Run assemble_report.py first.")

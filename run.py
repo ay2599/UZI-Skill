@@ -457,11 +457,10 @@ def main():
             sys.exit(0)
 
     # 找到生成的报告
-    from datetime import datetime
     from lib.market_router import parse_ticker
+    from lib.report_paths import build_report_dir
     ti = parse_ticker(args.ticker)
-    date = datetime.now().strftime("%Y%m%d")
-    report_dir = SCRIPTS_DIR / "reports" / f"{ti.full}_{date}"
+    report_dir = build_report_dir(SCRIPTS_DIR / "reports", ti.full)
     standalone = report_dir / "full-report-standalone.html"
 
     if not standalone.exists():
