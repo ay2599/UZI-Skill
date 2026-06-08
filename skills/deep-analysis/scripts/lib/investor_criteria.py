@@ -690,6 +690,369 @@ SHAW_RULES = [
 
 
 # ═══════════════════════════════════════════════════════════════
+# I 组 · AI 卡位/瓶颈猎手 (1 人 · 重磅角色 Serenity)
+# ═══════════════════════════════════════════════════════════════
+# 核心：对一只票的态度由「该股产品在当前 AI 浪潮里有没有卡位」决定。
+# 卡住脖子 → 重仓；没卡到位 → 直接不碰。依赖 stock_features 的派生特征
+# ai_chokepoint_score / ai_chain_hit / ai_irreplaceable / ai_smallcap。
+
+SERENITY_RULES = [
+    Rule("ai_chain_hit", "产品处于 AI 产业链关键环节", 5,
+         check=lambda f: f.get("ai_chain_hit", False),
+         pass_msg="命中 AI 链卡点 {ai_chain_keywords}",
+         fail_msg="不在 AI 产业链上 —— 对我没有意义"),
+    Rule("chokepoint_strong", "卡位评级强 (chokepoint ≥ 70)", 5,
+         check=lambda f: f.get("ai_chokepoint_score", 0) >= 70,
+         pass_msg="AI 卡位分 {ai_chokepoint_score} —— 卡住脖子了",
+         fail_msg="AI 卡位分仅 {ai_chokepoint_score}，卡位不够硬"),
+    # 以下三条均以「在 AI 链上」为前置——不在链上 Serenity 根本不看，自然全 fail。
+    Rule("irreplaceable", "上游不可替代 (切换+规模壁垒高)", 5,
+         check=lambda f: f.get("ai_chain_hit", False) and f.get("ai_irreplaceable", False),
+         pass_msg="切换成本+规模壁垒高，难被替代 (No substrate, no device)",
+         fail_msg="可替代性偏高，三家都能供，不是真瓶颈"),
+    Rule("smallcap_elastic", "中小市值高弹性 (市值 < 300 亿)", 4,
+         check=lambda f: f.get("ai_chain_hit", False) and f.get("ai_smallcap", False),
+         pass_msg="市值 {market_cap_yi:.0f} 亿，瓶颈兑现弹性大、grossly mispriced",
+         fail_msg="市值 {market_cap_yi:.0f} 亿偏大或不在链上，弹性有限"),
+    Rule("demand_inflection", "需求拐点信号 (政策/催化/行业高增)", 3,
+         check=lambda f: f.get("ai_chain_hit", False) and (f.get("policy_supportive", False) or f.get("has_positive_catalyst", False) or f.get("industry_growth", 0) >= 20),
+         pass_msg="需求侧出现拐点信号，机构 rotation 将至",
+         fail_msg="暂无明确需求拐点 / 硬验证"),
+]
+
+
+# ═══════════════════════════════════════════════════════════════
+# v3.7.0 · 13 位新晋科技/创新派 (B+5 / C+2 / E+1 / G+1 / H+4)
+# ═══════════════════════════════════════════════════════════════
+
+# ─── B 派新增 · Andreessen / Gurley / Naval / Gerstner / Chamath ──
+
+ANDREESSEN_RULES = [
+    # a16z · "Software is eating the world" · techno-optimist
+    Rule("software_or_ai_native", "软件 / AI 原生公司", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("软件","SaaS","AI","云","半导体","互联网","platform")),
+         pass_msg="{industry} · 软件/AI 原生赛道 · a16z 论文里的'吃掉世界'对象",
+         fail_msg="非软件/AI 原生 · 不在 techno-optimist 射程"),
+    Rule("rev_growth_30", "营收增速 > 30%", 4,
+         check=lambda f: f.get("rev_growth_3y", 0) > 30 or f.get("rev_growth_3y_pct", 0) > 30,
+         pass_msg="3y 营收增速 {rev_growth_3y:.0f}% · 增长曲线在 hyper 段",
+         fail_msg="3y 营收增速 {rev_growth_3y:.0f}% < 30 · 不够 hyper"),
+    Rule("network_effects", "网络效应 / 平台粘性", 4,
+         check=lambda f: f.get("moat_total", 0) >= 26 or f.get("network_effect_score", 0) >= 6,
+         pass_msg="护城河 {moat_total:.0f}/40 · 平台/网络效应可见",
+         fail_msg="护城河 {moat_total:.0f}/40 偏弱 · 没有网络效应锁定"),
+    Rule("market_size_huge", "TAM 千亿美元级", 3,
+         check=lambda f: f.get("tam_usd_bn", 0) >= 100 or f.get("market_cap_yi", 0) >= 5000,
+         pass_msg="TAM 巨大 · 给得起千倍空间",
+         fail_msg="TAM 不够大 · 天花板低"),
+    Rule("founder_led", "创始人仍主导", 3,
+         check=lambda f: f.get("founder_active", False) or f.get("founder_ownership_pct", 0) >= 5,
+         pass_msg="创始人仍掌舵 · founder mode",
+         fail_msg="创始人退场 · 失去 founder mode"),
+]
+
+GURLEY_RULES = [
+    # Benchmark · marketplace + SaaS 专家 · "magnitude of demand"
+    Rule("marketplace_or_saas", "marketplace / SaaS / B2B 平台", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("marketplace","SaaS","平台","软件","订阅")),
+         pass_msg="{industry} · marketplace/SaaS · Gurley 主战场",
+         fail_msg="非 marketplace/SaaS · 偏离 Gurley 射程"),
+    Rule("unit_economics_positive", "单位经济为正", 5,
+         check=lambda f: f.get("gross_margin", 0) >= 50 and f.get("net_margin", 0) > 0,
+         pass_msg="毛利率 {gross_margin:.0f}% + 净利率 {net_margin:.1f}% · 单位经济清晰",
+         fail_msg="毛利率 {gross_margin:.0f}% / 净利率 {net_margin:.1f}% · 单位经济不健康"),
+    Rule("magnitude_of_demand", "需求强度足", 4,
+         check=lambda f: f.get("rev_growth_3y", 0) > 25,
+         pass_msg="3y 营收增速 {rev_growth_3y:.0f}% · 需求强度真实",
+         fail_msg="增速不足 · magnitude of demand 不够"),
+    Rule("burn_multiple_ok", "烧钱倍数合理", 3,
+         check=lambda f: f.get("fcf_margin", 0) > -20 or f.get("fcf_positive", False),
+         pass_msg="FCF 健康 · 不是无底洞烧钱模式",
+         fail_msg="FCF 黑洞 · burn multiple 不可持续"),
+    Rule("valuation_reasonable", "估值不脱离基本面", 3,
+         check=lambda f: f.get("ev_to_revenue", 100) < 20,
+         pass_msg="EV/Rev = {ev_to_revenue:.1f}x · 估值有锚",
+         fail_msg="EV/Rev = {ev_to_revenue:.1f}x · 已脱离锚"),
+]
+
+NAVAL_RULES = [
+    # AngelList · 杠杆 / 长期主义 / 利基定价权
+    Rule("permissionless_leverage", "可复制的杠杆 (代码/媒体/资本)", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("软件","平台","内容","互联网","SaaS","AI")),
+         pass_msg="{industry} · 代码/媒体杠杆型业务",
+         fail_msg="重资产/重服务 · 缺可复制杠杆"),
+    Rule("specific_knowledge", "独特知识 / 不可教授", 4,
+         check=lambda f: f.get("moat_total", 0) >= 28,
+         pass_msg="护城河 {moat_total:.0f}/40 · 来自 specific knowledge",
+         fail_msg="护城河 {moat_total:.0f}/40 · 谁都能干"),
+    Rule("long_holding_horizon", "适合 10 年+ 持有", 4,
+         check=lambda f: f.get("roe_5y_above_15", 0) >= 4 or f.get("roe", 0) >= 18,
+         pass_msg="ROE 持续 · 长期复利的标的",
+         fail_msg="ROE 不持续 · 短期生意"),
+    Rule("not_zero_sum", "正和游戏", 3,
+         check=lambda f: not any(k in (f.get("industry","")) for k in ("博彩","期货","加密")),
+         pass_msg="非零和游戏 · 创造真实价值",
+         fail_msg="零和/负和游戏 · 不在 Naval 哲学里"),
+    Rule("compound_interest", "复利曲线清晰", 3,
+         check=lambda f: f.get("net_profit_growth_3y", 0) > 15,
+         pass_msg="3y 净利增速 {net_profit_growth_3y:.0f}% · 复利可见",
+         fail_msg="净利不复利 · 不在长期主义清单"),
+]
+
+GERSTNER_RULES = [
+    # Altimeter · NVIDIA / Snowflake 重仓 · AI 多头代表
+    Rule("ai_or_cloud_native", "AI / 云原生 / 算力链", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("AI","云","算力","芯片","半导体","CPO","光模块","数据库","SaaS")),
+         pass_msg="{industry} · AI/云算力赛道 · Altimeter 主战场",
+         fail_msg="非 AI/云赛道 · Gerstner 不重仓"),
+    Rule("revenue_acceleration", "营收加速 (非匀速)", 4,
+         check=lambda f: f.get("rev_growth_yoy", 0) > f.get("rev_growth_3y", 100) + 5,
+         pass_msg="同比 {rev_growth_yoy:.0f}% > 3y avg {rev_growth_3y:.0f}% · 加速中",
+         fail_msg="增速持平或减速 · 不是加速段"),
+    Rule("rule_of_40", "Rule of 40", 4,
+         check=lambda f: (f.get("rev_growth_3y", 0) + f.get("net_margin", 0)) >= 40,
+         pass_msg="增速 + 净利率 = {rev_growth_3y:.0f}+{net_margin:.0f} ≥ 40 · 优质 SaaS",
+         fail_msg="增速 {rev_growth_3y:.0f} + 利率 {net_margin:.0f} < 40 · 不达标"),
+    Rule("category_leader", "赛道前三", 3,
+         check=lambda f: f.get("industry_rank", 99) <= 3,
+         pass_msg="行业排名 #{industry_rank} · category leader",
+         fail_msg="行业排名 #{industry_rank} · 非头部"),
+    Rule("expensive_but_growing", "估值高但增长撑得起", 3,
+         check=lambda f: f.get("peg", 100) < 1.5 or f.get("rev_growth_3y", 0) > 35,
+         pass_msg="PEG {peg:.1f} or 增速 {rev_growth_3y:.0f}% · 贵但合理",
+         fail_msg="PEG {peg:.1f} 偏贵 + 增速不够 · 不值这个价"),
+]
+
+CHAMATH_RULES = [
+    # Social Capital / All-In · 早期 Meta / SPAC / 透明派
+    Rule("disruptor_thesis", "颠覆性公司 thesis 明确", 4,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("AI","新能源","生物","加密","太空","元宇宙","SaaS")),
+         pass_msg="{industry} · 颠覆性赛道 · Chamath 论文里的对象",
+         fail_msg="传统行业 · 不在 disruption 列表"),
+    Rule("tam_centibillion", "TAM 千亿美元+", 4,
+         check=lambda f: f.get("tam_usd_bn", 0) >= 100,
+         pass_msg="TAM ≥ $100bn · 大池子",
+         fail_msg="TAM 不够大 · 给不出 10x"),
+    Rule("path_to_profit", "盈利路径清晰", 4,
+         check=lambda f: f.get("gross_margin", 0) > 35 or f.get("net_margin", 0) > 0,
+         pass_msg="毛利率 {gross_margin:.0f}% · 路径清晰",
+         fail_msg="毛利率 {gross_margin:.0f}% · 看不到盈利路径"),
+    Rule("not_a_meme", "非纯叙事 meme", 3,
+         check=lambda f: f.get("rev", 0) > 5 or f.get("revenue_b", 0) > 0.5,
+         pass_msg="营收实在 · 不是纯故事",
+         fail_msg="营收过小 · 接近纯叙事 meme"),
+    Rule("transparent_metrics", "披露透明", 3,
+         check=lambda f: f.get("governance_score", 0) >= 6,
+         pass_msg="治理 {governance_score:.0f}/10 · 披露 OK",
+         fail_msg="治理 {governance_score:.0f}/10 · 不够透明"),
+]
+
+
+# ─── C 派新增 · 做空猎手 Burry / Chanos ───────────────────
+
+BURRY_RULES = [
+    # Scion · Big Short · 反 AI 大空头 · 关注估值泡沫 + 内幕
+    Rule("not_in_bubble_basket", "非估值泡沫篮子", 5,
+         check=lambda f: f.get("pe_ttm", 0) < 60 and f.get("ps", 100) < 15,
+         pass_msg="PE {pe_ttm:.0f} · PS {ps:.1f} · 未在 Burry 空头清单",
+         fail_msg="PE {pe_ttm:.0f} · PS {ps:.1f} · 估值泡沫风险"),
+    Rule("insider_not_selling", "高管未在大规模减持", 4,
+         check=lambda f: f.get("insider_selling_recent", False) is False,
+         pass_msg="近期无高管减持 · 内部信号 OK",
+         fail_msg="近期高管减持 · Burry 大空信号"),
+    Rule("debt_not_explosive", "债务可控", 3,
+         check=lambda f: f.get("debt_ratio", 100) < 70,
+         pass_msg="负债率 {debt_ratio:.0f}% · 不爆雷",
+         fail_msg="负债率 {debt_ratio:.0f}% · 雷点"),
+    Rule("not_retail_mania", "无散户狂热", 3,
+         check=lambda f: f.get("retail_holding_pct", 0) < 50,
+         pass_msg="散户占比 {retail_holding_pct:.0f}% · 未疯",
+         fail_msg="散户占比 {retail_holding_pct:.0f}% · meme 风险"),
+    Rule("fcf_real_not_eps", "FCF 真实 · 不是会计利润", 4,
+         check=lambda f: f.get("fcf_positive", False) and f.get("fcf_margin", 0) >= 5,
+         pass_msg="FCF 健康 {fcf_margin:.0f}% · 利润真实",
+         fail_msg="FCF 弱 · 利润可能粉饰"),
+]
+
+CHANOS_RULES = [
+    # Kynikos · 30 年专业做空 · TSLA / Nikola / 中概股空头
+    Rule("not_promotional_ceo", "CEO 不张扬", 4,
+         check=lambda f: f.get("ceo_promotional_score", 0) < 7,
+         pass_msg="CEO 不在 X/媒体过度推销",
+         fail_msg="CEO 过度推销 · Chanos 经典空头信号"),
+    Rule("audited_clean", "审计无保留", 5,
+         check=lambda f: f.get("audit_qualified", False) is False,
+         pass_msg="审计 clean · 无保留意见",
+         fail_msg="审计有保留意见 · 立即怀疑"),
+    Rule("cash_matches_eps", "现金匹配利润", 5,
+         check=lambda f: abs(f.get("ocf_to_net_income_ratio", 1.0) - 1.0) < 0.4,
+         pass_msg="OCF/净利 {ocf_to_net_income_ratio:.1f} · 比例合理",
+         fail_msg="OCF/净利 {ocf_to_net_income_ratio:.1f} · 大幅背离 · 可能账面利润"),
+    Rule("not_china_concept", "非中概雷区", 3,
+         check=lambda f: not (f.get("market") == "US" and "China" in (f.get("industry","") + f.get("country",""))),
+         pass_msg="非美上市中概 · 跳过 Chanos 黑名单",
+         fail_msg="美上市中概股 · 历史空头标的"),
+    Rule("debt_disclosure_clean", "债务披露清晰", 3,
+         check=lambda f: f.get("off_balance_debt_ratio", 0) < 0.2,
+         pass_msg="表外债务比例低 · 清晰",
+         fail_msg="表外债务 {off_balance_debt_ratio:.0%} · 雷"),
+]
+
+
+# ─── E 派新增 · 张磊 高瓴 · 长期主义 ─────────────────────
+
+ZHANG_LEI_RULES = [
+    # 高瓴 · "做时间的朋友" · 投腾讯京东百济宁德 · 长期主义代表
+    Rule("long_runway_industry", "赛道 10 年+ 跑道", 5,
+         check=lambda f: any(k in (f.get("industry","")) for k in ("互联网","消费","医药","新能源","半导体","AI","白酒","生物","创新药")),
+         pass_msg="{industry} · 长跑道赛道 · 高瓴主战场",
+         fail_msg="{industry} · 偏短周期 · 不在高瓴 thesis"),
+    Rule("category_leader_moat", "细分龙头 + 护城河", 5,
+         check=lambda f: f.get("industry_rank", 99) <= 3 and f.get("moat_total", 0) >= 26,
+         pass_msg="行业 #{industry_rank} · 护城河 {moat_total:.0f}/40 · 做时间朋友的对象",
+         fail_msg="非细分龙头或护城河弱 · 不入 portfolio"),
+    Rule("founder_aligned", "创始人长期主义对齐", 4,
+         check=lambda f: f.get("founder_ownership_pct", 0) >= 3 or f.get("founder_active", False),
+         pass_msg="创始人持股/在位 · 时间朋友能成为朋友",
+         fail_msg="创始人退场 · 失去长期对齐"),
+    Rule("compounder_track_record", "复利 track record", 4,
+         check=lambda f: f.get("roe_5y_above_15", 0) >= 3 and f.get("net_profit_growth_3y", 0) > 12,
+         pass_msg="ROE 5y / 净利 3y 复利 · 历史可验证",
+         fail_msg="复利 track record 不足"),
+    Rule("not_just_cyclical", "非纯周期", 3,
+         check=lambda f: not any(k in (f.get("industry","")) for k in ("钢铁","煤炭","化工原料","航运")),
+         pass_msg="非纯周期 · 适合做时间朋友",
+         fail_msg="{industry} · 纯周期 · 不是高瓴的菜"),
+]
+
+
+# ─── G 派新增 · Cliff Asness · AQR 因子量化 ───────────────
+
+ASNESS_RULES = [
+    # AQR · 价值 × 质量 × 动量 三因子量化
+    Rule("value_factor", "价值因子: PE / PB 双低", 4,
+         check=lambda f: f.get("pe_ttm", 100) < 20 and f.get("pb", 100) < 4,
+         pass_msg="PE {pe_ttm:.0f} + PB {pb:.1f} · 价值因子打分高",
+         fail_msg="PE {pe_ttm:.0f} + PB {pb:.1f} · 价值因子打分低"),
+    Rule("quality_factor", "质量因子: 高 ROE + 低杠杆", 4,
+         check=lambda f: f.get("roe", 0) > 12 and f.get("debt_ratio", 100) < 60,
+         pass_msg="ROE {roe:.1f}% + 负债 {debt_ratio:.0f}% · 质量因子打分高",
+         fail_msg="ROE {roe:.1f}% + 负债 {debt_ratio:.0f}% · 质量因子打分低"),
+    Rule("momentum_factor", "动量因子: 6-12 月跑赢", 3,
+         check=lambda f: f.get("ytd_return", 0) > 0 and f.get("price_above_ma200", False),
+         pass_msg="YTD {ytd_return:.1f}% · MA200 之上 · 动量打分高",
+         fail_msg="YTD {ytd_return:.1f}% · 动量不够"),
+    Rule("profitability_consistent", "盈利能力稳定", 3,
+         check=lambda f: f.get("roe_5y_min", 0) > 8,
+         pass_msg="ROE 5y 最低 {roe_5y_min:.1f}% · 稳",
+         fail_msg="ROE 5y 最低 {roe_5y_min:.1f}% · 不稳"),
+    Rule("not_lottery_ticket", "非彩票股", 3,
+         check=lambda f: f.get("pe_ttm", 0) > 0 and f.get("pe_ttm", 1e9) < 80,
+         pass_msg="PE {pe_ttm:.0f} 在合理区 · 非彩票",
+         fail_msg="PE 异常 · 彩票股特征 · Asness 论文常空"),
+]
+
+
+# ─── H 派新增 · AI 卡位 / 瓶颈猎手 ─────────────────────────
+
+JENSEN_HUANG_RULES = [
+    # 黄仁勋 · NVIDIA · AI 算力霸主 · 光速摩尔定律
+    Rule("ai_compute_demand", "AI 算力需求强相关", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("AI","GPU","CPO","光模块","HBM","半导体","液冷","算力","数据中心")),
+         pass_msg="{industry} · 在 AI 算力链上 · Jensen 重点",
+         fail_msg="不在 AI 算力链 · Jensen 没视角"),
+    Rule("cuda_ecosystem_proxy", "CUDA / 生态绑定", 4,
+         check=lambda f: f.get("moat_total", 0) >= 28 or any(k in (f.get("name","")) for k in ("NVIDIA","TSMC","台积电","SK 海力士","三星电子")),
+         pass_msg="生态绑定深 · 护城河 {moat_total:.0f}/40",
+         fail_msg="非生态核心 · 容易被替代"),
+    Rule("data_center_capex_beneficiary", "数据中心资本开支受益", 4,
+         check=lambda f: f.get("rev_growth_yoy", 0) > 30,
+         pass_msg="同比 {rev_growth_yoy:.0f}% · 数据中心 Capex 直接受益",
+         fail_msg="增速 {rev_growth_yoy:.0f}% · 没吃到 Capex 红利"),
+    Rule("gross_margin_strong", "毛利率 ≥ 50%", 3,
+         check=lambda f: f.get("gross_margin", 0) >= 50,
+         pass_msg="毛利率 {gross_margin:.0f}% · 定价权强",
+         fail_msg="毛利率 {gross_margin:.0f}% · 缺定价权"),
+    Rule("light_speed_moore_compliant", "光速摩尔定律节奏", 3,
+         check=lambda f: f.get("rd_intensity", 0) >= 8,
+         pass_msg="R&D 强度 {rd_intensity:.0f}% · 迭代节奏 OK",
+         fail_msg="R&D 强度 {rd_intensity:.0f}% · 跟不上 Jensen 节奏"),
+]
+
+MUSK_RULES = [
+    # 马斯克 · 第一性原理 · TSLA/SpaceX/X · 跨多个科技板块
+    Rule("first_principles_industry", "第一性原理能颠覆的赛道", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("新能源车","电池","航天","机器人","AI","卫星","Neuralink","太阳能")),
+         pass_msg="{industry} · 适合第一性原理打法",
+         fail_msg="{industry} · 不是 Musk 第一性能颠覆的"),
+    Rule("vertical_integration", "垂直整合度高", 4,
+         check=lambda f: f.get("vertical_integration_score", 0) >= 6 or f.get("gross_margin", 0) >= 20,
+         pass_msg="垂直整合明显 · 成本结构可控",
+         fail_msg="外包/松散 · 不是 Musk 风格"),
+    Rule("manufacturing_scale", "制造规模 / 量产", 4,
+         check=lambda f: f.get("rev", 0) > 10 or f.get("revenue_b", 0) > 1,
+         pass_msg="营收 ≥ 100 亿 · 已进入量产阶段",
+         fail_msg="营收太小 · 量产规模未达"),
+    Rule("not_legacy_oem", "非传统 OEM", 3,
+         check=lambda f: not any(k in (f.get("industry","")) for k in ("传统汽车","传统制造","重型机械") if "新能源" not in f.get("industry","")),
+         pass_msg="非传统 OEM · 在变革侧",
+         fail_msg="{industry} · 传统 OEM · Musk 看空"),
+    Rule("ceo_visible", "管理层敢公开 thesis", 3,
+         check=lambda f: f.get("ceo_promotional_score", 0) >= 5,
+         pass_msg="管理层有声量 · 能讲清 thesis",
+         fail_msg="管理层沉默 · 不在 Musk 偏好"),
+]
+
+ALTMAN_RULES = [
+    # Sam Altman · OpenAI · AGI 叙事 + 上下游受益方
+    Rule("agi_supply_chain", "AGI 上下游 (算力/数据/能源/应用)", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("AI","数据中心","云","半导体","核电","太阳能","电网","SaaS","机器人")),
+         pass_msg="{industry} · AGI 受益方",
+         fail_msg="{industry} · AGI 不直接传导"),
+    Rule("scaling_laws_compliant", "符合 scaling laws 红利", 4,
+         check=lambda f: f.get("rev_growth_yoy", 0) > 25 or f.get("capex_growth_yoy", 0) > 30,
+         pass_msg="增速/Capex 增长 · 拿到 scaling laws 红利",
+         fail_msg="增速/Capex 增长不足 · 没拿到 scaling 红利"),
+    Rule("platform_or_infra", "平台 / 基建型", 4,
+         check=lambda f: f.get("moat_total", 0) >= 26,
+         pass_msg="护城河 {moat_total:.0f}/40 · 平台/基建定位",
+         fail_msg="护城河 {moat_total:.0f}/40 · 偏应用层 · 易被颠覆"),
+    Rule("energy_or_compute_bottleneck", "卡位能源 / 算力瓶颈", 3,
+         check=lambda f: any(k in (f.get("industry","")) for k in ("核电","可控核聚变","电网","数据中心","算力","HBM","液冷")),
+         pass_msg="{industry} · 卡 AGI 瓶颈",
+         fail_msg="不卡 AGI 瓶颈 · Altman 没特别多看"),
+    Rule("not_pure_consumer_app", "非纯消费应用", 3,
+         check=lambda f: not (f.get("industry","") in ("消费电子","游戏","社交")),
+         pass_msg="非纯应用层 · 更深一层 · 抗 GPT-N 颠覆",
+         fail_msg="{industry} · 纯应用层 · 易被 GPT-N 颠覆"),
+]
+
+SAYLOR_RULES = [
+    # Michael Saylor · MSTR · BTC 信徒 · 数字黄金叙事
+    Rule("btc_or_digital_asset_exposure", "BTC / 数字资产敞口", 5,
+         check=lambda f: any(k in (f.get("industry","") + f.get("name","")) for k in ("比特币","BTC","加密","Crypto","Mining","Coinbase","区块链","数字资产")),
+         pass_msg="{industry} · 直接 BTC/数字资产敞口",
+         fail_msg="无 BTC 敞口 · Saylor 不看"),
+    Rule("treasury_strategy_signal", "财库策略 / 抗通胀资产", 4,
+         check=lambda f: f.get("cash_to_marketcap_ratio", 0) > 0.10 or f.get("btc_holdings_b", 0) > 0,
+         pass_msg="财库现金/BTC 充裕 · 抗通胀资产配置",
+         fail_msg="财库策略不明显 · Saylor 不感兴趣"),
+    Rule("not_just_eps_play", "非 EPS 游戏", 3,
+         check=lambda f: f.get("revenue_b", 0) > 0.5,
+         pass_msg="营收非零 · 不是纯 EPS 财技公司",
+         fail_msg="营收过小 · 纯 EPS 财技 · Saylor 看空"),
+    Rule("hard_money_thesis", "硬通货叙事相符", 3,
+         check=lambda f: f.get("debt_ratio", 100) < 80,  # 高负债 + BTC 是 Saylor 经典套路
+         pass_msg="负债率 {debt_ratio:.0f}% · 可以叠 BTC 杠杆",
+         fail_msg="负债率 {debt_ratio:.0f}% · 杠杆已满"),
+    Rule("fiat_devaluation_beneficiary", "法币贬值受益方", 3,
+         check=lambda f: any(k in (f.get("industry","")) for k in ("加密","黄金","白银","稀有金属","比特币")),
+         pass_msg="{industry} · 法币贬值受益",
+         fail_msg="不在法币贬值受益清单"),
+]
+
+
+# ═══════════════════════════════════════════════════════════════
 # MASTER REGISTRY
 # ═══════════════════════════════════════════════════════════════
 
@@ -701,35 +1064,50 @@ INVESTOR_RULES: dict[str, list[Rule]] = {
     "munger": MUNGER_RULES,
     "templeton": TEMPLETON_RULES,
     "klarman": KLARMAN_RULES,
-    # Group B · Growth
+    # Group B · Growth (+5 new tech VC · v3.7.0)
     "lynch": LYNCH_RULES,
     "oneill": ONEIL_RULES,
     "thiel": THIEL_RULES,
     "wood": WOOD_RULES,
-    # Group C · Macro Hedge
+    "andreessen": ANDREESSEN_RULES,
+    "gurley": GURLEY_RULES,
+    "naval": NAVAL_RULES,
+    "gerstner": GERSTNER_RULES,
+    "chamath": CHAMATH_RULES,
+    # Group C · Macro Hedge (+2 short sellers · v3.7.0)
     "soros": SOROS_RULES,
     "dalio": DALIO_RULES,
     "marks": MARKS_RULES,
     "druck": DRUCK_RULES,
     "robertson": ROBERTSON_RULES,
+    "burry": BURRY_RULES,
+    "chanos": CHANOS_RULES,
     # Group D · Technical
     "livermore": LIVERMORE_RULES,
     "minervini": MINERVINI_RULES,
     "darvas": DARVAS_RULES,
     "gann": GANN_RULES,
-    # Group E · China Value
+    # Group E · China Value (+1 Hillhouse · v3.7.0)
     "duan": DUAN_RULES,
     "zhangkun": ZHANGKUN_RULES,
     "zhushaoxing": ZHUSHAOXING_RULES,
     "xiezhiyu": XIEZHIYU_RULES,
     "fengliu": FENGLIU_RULES,
     "dengxiaofeng": DENGXIAOFENG_RULES,
+    "zhang_lei": ZHANG_LEI_RULES,
     # Group F · 游资 (from YOUZI_RULES_MAP)
     **YOUZI_RULES_MAP,
-    # Group G · Quant
+    # Group G · Quant (+1 AQR · v3.7.0)
     "simons": SIMONS_RULES,
     "thorp": THORP_RULES,
     "shaw": SHAW_RULES,
+    "asness": ASNESS_RULES,
+    # Group H · AI 卡位/瓶颈猎手 (1 旗舰 + 4 新晋 · v3.7.0)
+    "serenity": SERENITY_RULES,
+    "jensen_huang": JENSEN_HUANG_RULES,
+    "musk": MUSK_RULES,
+    "altman": ALTMAN_RULES,
+    "saylor": SAYLOR_RULES,
 }
 
 

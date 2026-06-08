@@ -375,6 +375,84 @@ def extract_features(raw: dict, dims: dict) -> dict:
     else:
         f["market"] = "US"
 
+    # ─────────────── AI 卡位 / 瓶颈点 (Serenity · H 组) ───────────────
+    # v3.6.3 · Serenity「AI 产业链卡脖子」派生特征。
+    # 四因子合成 ai_chokepoint_score(0-100)：AI 链命中 × 不可替代性 × 小盘弹性 × 需求拐点。
+    # 不在 AI 链上 → 直接腰斩到接近 0（Serenity 不碰）。
+    import json as _json
+    try:
+        _chain_txt = _json.dumps(chain, ensure_ascii=False) if chain else ""
+        _ind_txt = _json.dumps(industry, ensure_ascii=False) if isinstance(industry, dict) else str(industry)
+    except (TypeError, ValueError):
+        _chain_txt, _ind_txt = "", ""
+    _blob = " ".join([
+        str(f.get("industry", "")), str(f.get("name", "")),
+        _chain_txt, _ind_txt, text,  # `text` = 事件 timeline (已 lower)
+    ]).lower()
+    _AI_CHOKEPOINT_KW = [
+        # 数据中心光 / 先进封装 / 化合物半导体 / 互连 / 算力
+        "光模块", "光芯片", "cpo", "光引擎", "硅光", "光通信", "光器件", "激光器", "eml", "vcsel",
+        "hbm", "cowos", "先进封装", "封装基板", "abf", "载板",
+        "inp", "磷化铟", "砷化镓", "化合物半导体", "衬底", "外延", "晶体生长",
+        "pcb", "高速铜", "铜连接", "铜缆", "背板连接器", "连接器",
+        "液冷", "散热", "电源", "bbu", "服务器电源", "pdu",
+        "交换机", "算力", "ai 芯片", "asic", "gpu", "risc-v", "存储", "ddr",
+        "ai server", "ai 服务器", "数据中心", "data center", "光纤", "空芯光纤",
+        # AR/VR 近眼显示 + 消费/车载光学（AI 终端侧光学链）· 注意不用裸词 ar/vr 防误匹配
+        "光学", "光电子", "光学元件", "光学薄膜", "光波导", "衍射光波导", "waveguide",
+        "光栅", "滤光片", "镀膜", "棱镜", "微棱镜", "镜头", "摄像模组", "相机模组", "光学镜片",
+        "增强现实", "虚拟现实", "混合现实", "头显", "近眼显示", "ar/vr", "ar 眼镜", "ar眼镜",
+        "micro-led", "microled", "硅基oled", "车载光学", "衍射光学", "晶圆级光学",
+        # v3.7.x · issue #72 · 具身智能 / 人形机器人卡位链
+        # 「具身智能 = AI 的物理化」· Serenity 本人推过绿的谐波(谐波减速器) · 这些
+        # 上游核心零部件同样符合"难替代 + 供给紧 + 没被定价"的卡脖子逻辑。
+        "人形机器人", "具身智能", "humanoid", "人形", "机器人", "robot",
+        "谐波减速器", "谐波减速", "谐波", "rv减速器", "rv 减速器", "减速器", "精密减速器",
+        "行星滚柱丝杠", "滚柱丝杠", "行星滚柱", "丝杠", "滚珠丝杠", "梯形丝杠",
+        "灵巧手", "dexterous", "机械臂", "机械手", "关节模组", "执行器", "actuator",
+        "空心杯电机", "空心杯", "无框电机", "无框力矩电机", "伺服电机", "伺服系统",
+        "六维力", "力传感器", "力矩传感器", "触觉传感器", "电子皮肤", "扭矩传感器",
+    ]
+    _ai_hit = [kw for kw in _AI_CHOKEPOINT_KW if kw in _blob]
+    f["ai_chain_hit"] = len(_ai_hit) > 0
+    f["ai_chain_keywords"] = _ai_hit[:8]
+    # 不可替代性：切换成本 + 规模壁垒 (各 0-10 → 0-20)
+    _irrepl = (f.get("moat_switching", 0) or 0) + (f.get("moat_scale", 0) or 0)
+    f["ai_irreplaceable"] = _irrepl >= 12
+    # 小盘弹性：市值越小越高
+    _mc = f.get("market_cap_yi", 0) or 0
+    if _mc <= 0:
+        _elasticity = 0.5
+    elif _mc < 100:
+        _elasticity = 1.0
+    elif _mc < 300:
+        _elasticity = 0.8
+    elif _mc < 800:
+        _elasticity = 0.5
+    elif _mc < 2000:
+        _elasticity = 0.25
+    else:
+        _elasticity = 0.1
+    f["ai_smallcap"] = 0 < _mc < 300
+    # 需求拐点：政策支持 / 正向催化 / 行业高增
+    _inflection = 0.0
+    if f.get("policy_supportive"):
+        _inflection += 0.4
+    if f.get("has_positive_catalyst"):
+        _inflection += 0.3
+    if f.get("industry_growth", 0) >= 20:
+        _inflection += 0.3
+    _inflection = min(_inflection, 1.0)
+    # 合成：AI 链是门槛
+    if f["ai_chain_hit"]:
+        _kw_strength = min(len(_ai_hit), 3) / 3.0     # 命中强度 0-1
+        _irr_norm = min(_irrepl / 16.0, 1.0)          # 16/20 视作满格
+        _score = (0.35 * _kw_strength + 0.30 * _irr_norm +
+                  0.20 * _elasticity + 0.15 * _inflection) * 100
+    else:
+        _score = 8.0 * _elasticity                    # 不在链上 → 接近 0
+    f["ai_chokepoint_score"] = round(_score, 1)
+
     return f
 
 

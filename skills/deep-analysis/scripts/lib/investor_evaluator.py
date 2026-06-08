@@ -19,6 +19,7 @@ Output schema:
 """
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from lib.investor_criteria import INVESTOR_RULES, Rule
@@ -31,12 +32,35 @@ _INVESTOR_GROUP_MAP: dict[str, str] = {inv["id"]: inv.get("group", "") for inv i
 # v2.13.3 · F 组射程检查用：id → 中文 name（供 seat_db.is_in_range 查 SEATS key）
 _INVESTOR_NAME_MAP: dict[str, str] = {inv["id"]: inv.get("name", "") for inv in _INVESTORS}
 
+# v3.5.0 · 流派标签 · 用户用 --school 锁定单一视角时 · skip 其他派
+SCHOOL_LABELS: dict[str, str] = {
+    "A": "价值派",
+    "B": "成长派",
+    "C": "宏观派",
+    "D": "技术派",
+    "E": "中国价投",
+    "F": "A 股游资",
+    "G": "量化",
+    "H": "科技领袖派",
+    "I": "AI 卡位/瓶颈猎手",
+}
+
+
+def get_locked_school() -> str:
+    """v3.5.0 · 读 UZI_SCHOOL env · 返回大写单字母 (A-G) · 无效则返 ''."""
+    raw = (os.environ.get("UZI_SCHOOL") or "").strip().upper()
+    return raw if raw in SCHOOL_LABELS else ""
+
 
 def _is_youzi_out_of_range(investor_id: str, features: dict) -> tuple[bool, str]:
     """v2.13.3 · F 组游资射程前置检查.
 
     对 F 组投资者 · 调 seat_db.is_in_range · 不在射程则 skip（不打分）.
     解决 v2.13.2 之前"大市值股对所有游资都判看多/看空"的 bug.
+
+    v3.4.5 · LHB 反查覆盖：如果该游资席位在 30 天内的龙虎榜上实际有
+    买卖记录 · 即使股票市值超出该游资的常规射程 · 也强制参与评分（不 skip）.
+    解决用户反馈"京东方游资 23/23 全 skip · 但 LHB 实际有 3-5 个席位参与涨停"的 bug.
 
     Returns:
         (out_of_range: bool, reason: str)
@@ -50,17 +74,25 @@ def _is_youzi_out_of_range(investor_id: str, features: dict) -> tuple[bool, str]
     nickname = _INVESTOR_NAME_MAP.get(investor_id, "")
     if not nickname or nickname not in SEATS:
         return False, ""  # seat 没定义 · 不做 skip 决策
+
     # is_in_range 需要 market_cap 字段（元）· features 里常叫 market_cap_yi（亿）或 market_cap
     mc = features.get("market_cap") or 0
-    # 兼容：features 可能只有 market_cap_yi（亿）· 换算为元
     if not mc and features.get("market_cap_yi"):
         mc = float(features["market_cap_yi"]) * 1e8
     probe = dict(features)
     probe["market_cap"] = mc
-    if not is_in_range(nickname, probe):
-        mc_yi = mc / 1e8 if mc else 0
-        return True, f"市值 {mc_yi:.0f} 亿不在 {nickname} 射程"
-    return False, ""
+
+    if is_in_range(nickname, probe):
+        return False, ""
+
+    # v3.4.5 · 射程外但 LHB 显示该席位真实参与 → 不 skip · 强制评分
+    # matched_youzi 是 list[str] of 游资昵称（来自 fetch_lhb.match_seats_in_lhb keys）
+    matched = features.get("matched_youzi") or []
+    if matched and nickname in matched:
+        return False, ""  # LHB 反查覆盖 · 实际参与了 · 不能 skip
+
+    mc_yi = mc / 1e8 if mc else 0
+    return True, f"市值 {mc_yi:.0f} 亿不在 {nickname} 射程"
 
 
 # ────────────────────────────────────────────────────────────────
@@ -110,6 +142,17 @@ def evaluate(investor_id: str, features: dict) -> dict:
         Layer 2 · Rule engine: quantitative criteria from investor_criteria.py
         Layer 3 · Composite: merge rule score with reality adjustments
     """
+    # v3.5.0 · 用户锁定单一流派视角 (--school A/B/C/D/E/F/G) · 其他派直接 skip
+    # 注意：未分组（group=""）的评委也 skip · 锁定就是锁定 · 不漏网
+    locked = get_locked_school()
+    if locked:
+        inv_group = _INVESTOR_GROUP_MAP.get(investor_id, "")
+        if inv_group != locked:
+            return _skip_result(
+                investor_id,
+                f"用户锁定 {SCHOOL_LABELS.get(locked, locked)} 派视角 · 非该派评委不参与",
+            )
+
     # ─── Layer 1: Reality Check ───
     market = features.get("market", "A")
     ticker = features.get("ticker", "")

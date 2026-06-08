@@ -12,7 +12,7 @@
 [![Methods](https://img.shields.io/badge/Institutional%20Methods-17-red)]()
 [![Self-Review](https://img.shields.io/badge/Self--Review-13%20checks-blueviolet)](skills/deep-analysis/scripts/lib/self_review.py)
 
-**A-share / HK / US deep-analysis engine — with first-class Chinese-market coverage Western terminals don't touch. v3.3.2: GitHub issues #50 (svg_sparkline NameError) + #51 (XueQiu cubes_search.json EOL) hotfix · v3.3.1: Hermes compat regression fix · v3.2.0: assemble_report split (-80%) · v3.0.0: pipeline default. v2.x APIs 100% compatible · 337 pytest pass.**
+**A-share / HK / US deep-analysis engine — with first-class Chinese-market coverage Western terminals don't touch. v3.4.4: data-quality banner UX (ETF "17% coverage" no longer reads as data failure · WCAG-compliant contrast on orange) · v3.4.3: open-end mutual fund classification + field-level basic fallback · v3.4.2: Windows + Clash Schannel TLS compat · v3.4.1: verdict granularity refinement. 397 pytest pass.**
 
 [Install](#install) · [Usage](#usage) · [Why Western Investors Should Care](#-why-western-investors-should-care) · [Jury Panel](#-51-investor-jury) · [Methods](#-17-institutional-methods) · [Self-Review Gate 🆕](#-mechanical-self-review-gate-new-in-v29) · [Screenshots](#-what-the-report-looks-like) · [FAQ](#-faq)
 
@@ -40,7 +40,7 @@ So yes — this plugin helps you understand Chinese names like **Alibaba** (`BAB
 
 ## What It Does
 
-One sentence: give it a ticker, Claude becomes your analyst — pulls **22 dimensions of data**, runs **17 Wall-Street analysis models**, has **51 investors with distinct methodologies** score the stock, and produces a 600 KB Bloomberg-style HTML report.
+One sentence: give it a ticker, Claude becomes your analyst — pulls **22 dimensions of data**, runs **17 Wall-Street analysis models**, has **52 investors with distinct methodologies** score the stock, and produces a 600 KB Bloomberg-style HTML report.
 
 ```
 /stock-deep-analyzer:analyze-stock 600519         # Kweichow Moutai (A-share)
@@ -62,7 +62,7 @@ After 5-8 minutes you get:
 This is early-stage; forum reports plenty of bugs. If you want to help test or just trade notes, WeChat group QR below (primarily Chinese-speaking — if you prefer English, file issues on GitHub and we'll reply). For the latest features, track the `develop` branch.
 
 <p align="center">
-  <img src="docs/screenshots/b8869535930c6e362545990e98f24890.jpg" width="300" alt="WeChat group QR code" />
+  <img src="docs/screenshots/76fd0d2420e4c1a646514670c918dcf5.jpg" width="300" alt="WeChat group QR code" />
 </p>
 
 ---
@@ -341,7 +341,7 @@ A: Best: use ticker codes (`BABA` / `00700.HK` / `600519.SH`). Name-resolution w
 A: Yes. The `quotes-knowledge-base.md` contains real published quotes from 45+ investors (22 Western, 23 Chinese), each with source URLs (Berkshire letters, Oaktree memos, books, interviews). Agents are instructed to mimic each investor's voice **using these real quotes**, not fabricate a "Buffett-style" line.
 
 **Q: Is this investment advice?**
-A: **No.** This is a research tool, not a fortune teller. The 51 investor opinions are rule-engine simulations, not the real people's views. Don't bet the farm on Claude's Buffett impression.
+A: **No.** This is a research tool, not a fortune teller. The 52 investor opinions are rule-engine simulations, not the real people's views. Don't bet the farm on Claude's Buffett impression.
 
 **Q: I'm behind the Great Firewall, will data sources work?**
 A: Most do. `akshare` / `yfinance` / Eastmoney / XueQiu all work from mainland China. Some Western sources (Bloomberg / Reuters) aren't used. DuckDuckGo web search occasionally rate-limits — see `docs/NETWORK-TROUBLESHOOTING.md` if the `3_macro` / `13_policy` / `15_events` dims report empty.
@@ -385,7 +385,7 @@ python run.py <ticker> --no-resume
    ┌──────────────────────────────────────────────┐
    │   Task 2 · Rule engine scoring               │
    │   22 dims → dimensions.json                  │
-   │   51 investors × 180 rules → panel.json      │
+   │   52 investors × 180 rules → panel.json      │
    └──────────────────────────────────────────────┘
                        ↓ HARD-GATE (agent takes over)
    ┌──────────────────────────────────────────────┐

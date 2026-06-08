@@ -160,6 +160,81 @@ def _fetch_a_share(ti) -> dict:
     except Exception as e:
         out["_dividend_error"] = str(e)
 
+    # v3.4.2 · BaoStock 兜底（Schannel TLS / 网络受限场景）
+    # 当 akshare 链路全挂时（roe/net_margin/revenue_history 都空）· 用 baostock 季报数据补齐.
+    # 触发条件：核心字段缺失 + baostock 可用.
+    needs_fallback = (
+        not out.get("roe") and not out.get("revenue_history") and not out.get("net_margin")
+    )
+    if needs_fallback:
+        try:
+            import baostock as _bs
+            from datetime import datetime as _dt
+            lg = _bs.login()
+            if lg.error_code == "0":
+                bs_code = ("sh." if code.startswith(("60", "68", "5", "9")) else "sz.") + code
+                cur_year = _dt.now().year
+                rows = []
+                for y in range(cur_year - 5, cur_year + 1):
+                    for q in (1, 2, 3, 4):
+                        rs = _bs.query_profit_data(code=bs_code, year=y, quarter=q)
+                        while rs.error_code == "0" and rs.next():
+                            rows.append(rs.get_row_data())
+                _bs.logout()
+                if rows:
+                    fields = ["code", "pubDate", "statDate", "roeAvg", "npMargin",
+                              "gpMargin", "netProfit", "epsTTM", "MBRevenue", "totalShare"]
+                    # 按报告期排序 · 拿最新
+                    rec = [dict(zip(fields, r)) for r in rows]
+                    rec.sort(key=lambda r: r.get("statDate", ""))
+                    # ROE 历史（年报 · 季报每年取最后一个）
+                    annual = {}
+                    for r in rec:
+                        sd = r.get("statDate", "")
+                        if sd.endswith("-12-31"):
+                            try:
+                                annual[sd[:4]] = round(float(r["roeAvg"]) * 100, 2)
+                            except (TypeError, ValueError):
+                                pass
+                    if annual:
+                        out["roe_history"] = [annual[y] for y in sorted(annual.keys())[-6:]]
+                    # 营收历史（同样取年报 · MBRevenue 转亿）
+                    rev_annual = {}
+                    for r in rec:
+                        sd = r.get("statDate", "")
+                        if sd.endswith("-12-31"):
+                            try:
+                                rev_annual[sd[:4]] = round(float(r["MBRevenue"]) / 1e8, 2)
+                            except (TypeError, ValueError):
+                                pass
+                    if rev_annual:
+                        out["revenue_history"] = [rev_annual[y] for y in sorted(rev_annual.keys())[-6:]]
+                    # 最新一期 · 综合 ROE / 净利率 / 毛利率
+                    last = rec[-1]
+                    if last.get("roeAvg") and not out.get("roe"):
+                        try:
+                            out["roe"] = f"{float(last['roeAvg']) * 100:.1f}%"
+                        except (TypeError, ValueError):
+                            pass
+                    if last.get("npMargin") and not out.get("net_margin"):
+                        try:
+                            out["net_margin"] = f"{float(last['npMargin']) * 100:.1f}%"
+                        except (TypeError, ValueError):
+                            pass
+                    if last.get("gpMargin") and not out.get("gross_margin"):
+                        try:
+                            out["gross_margin"] = f"{float(last['gpMargin']) * 100:.1f}%"
+                        except (TypeError, ValueError):
+                            pass
+                    # 营收增长（最近 2 年）
+                    rh = out.get("revenue_history") or []
+                    if len(rh) >= 2 and rh[-2] and not out.get("revenue_growth"):
+                        growth = (rh[-1] - rh[-2]) / rh[-2] * 100
+                        out["revenue_growth"] = f"{growth:+.1f}%"
+                    out["_baostock_fallback"] = "fetch_financials 通过 baostock 补齐 · Schannel TLS 受限场景"
+        except Exception as _e:
+            out["_baostock_err"] = f"{type(_e).__name__}: {str(_e)[:80]}"
+
     return out
 
 

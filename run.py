@@ -291,6 +291,16 @@ def main():
                         help="v2.7.1 · 启用 XueQiu Playwright 登录态抓取实盘比赛持仓（首次需 `python -m lib.xueqiu_browser login`）")
     parser.add_argument("--depth", choices=["lite", "medium", "deep"], default=None,
                         help="v2.10.2 · 思考深度 · lite(1-2min) / medium(5-8min · 默认) / deep(15-20min · 含 Bull-Bear 辩论 + Segmental)")
+    parser.add_argument("--school", choices=["A", "B", "C", "D", "E", "F", "G", "H", "I"], default=None,
+                        help="v3.5.0 · 锁定单一流派视角 · A价值/B成长/C宏观/D技术/E中国价投/F游资/G量化/H科技领袖派/I Serenity卡位猎手 · 其他派评委 skip · 报告顶部标注")
+    parser.add_argument("--versus", nargs="+", metavar="TICKER",
+                        help="v3.6.0 · 多股横向对比模式 · 接受 2-4 个代码 / 中文名 · 输出单 HTML "
+                             "(如 --versus 600519.SH 000858.SZ · 自动 resume 复用 cache)")
+    parser.add_argument("--portfolio", metavar="CSV", default=None,
+                        help="v3.6.0 · 组合批量分析 · CSV 列含 ticker / weight / note · "
+                             "输出排名 + 加权评分 + 健康度 · 自动 resume")
+    parser.add_argument("--output-dir", metavar="DIR", default=None,
+                        help="v2.11.0 · SaaS 集成：把产出（standalone html + 图 + 摘要）拷贝到该目录，并在其中生成 index.html / report.meta.json。建议配合 --no-browser 使用。")
     args = parser.parse_args()
 
     # v2.10.5 · run.py 是 CLI 直跑入口（agent 流程走 stage1/stage2 直接调用，不经 run.py）。
@@ -320,6 +330,47 @@ def main():
     if args.enable_xueqiu_login:
         os.environ["UZI_XQ_LOGIN"] = "1"
         print("🔓 启用 XueQiu 登录态（19_contests 维度抓实盘组合）")
+
+    # v3.5.0 · 单一流派视角锁定 · 通过 env 传给 investor_evaluator
+    if args.school:
+        os.environ["UZI_SCHOOL"] = args.school
+        _SCHOOL_NAMES = {"A": "价值派", "B": "成长派", "C": "宏观派", "D": "技术派",
+                         "E": "中国价投", "F": "A 股游资", "G": "量化",
+                         "H": "科技领袖派", "I": "Serenity · AI 卡位/瓶颈猎手"}
+        print(f"🎯 已锁定 {args.school} 派视角 · {_SCHOOL_NAMES.get(args.school, args.school)} · 其他派评委 skip")
+
+    # v3.6.0 · 横向对比模式 · 早返回 · 不走单股分析
+    if args.versus:
+        if not (2 <= len(args.versus) <= 4):
+            print(f"❌ --versus 接受 2-4 个 ticker · 实际 {len(args.versus)}")
+            sys.exit(2)
+        from lib.versus_runner import run_versus
+        result = run_versus(
+            args.versus,
+            depth=args.depth or "lite",
+            auto_open=not args.no_browser,
+        )
+        if result.get("status") == "completed":
+            print(f"✅ 横向对比完成 · {result['report_path']}")
+            sys.exit(0)
+        else:
+            print(f"⚠️  横向对比未生成 · {result}")
+            sys.exit(1)
+
+    # v3.6.0 · 组合批量分析 · 早返回
+    if args.portfolio:
+        from lib.portfolio_runner import run_portfolio
+        result = run_portfolio(
+            args.portfolio,
+            depth=args.depth or "lite",
+            auto_open=not args.no_browser,
+        )
+        if result.get("status") == "completed":
+            print(f"✅ 组合分析完成 · {result['report_path']}")
+            sys.exit(0)
+        else:
+            print(f"⚠️  组合分析失败 · {result}")
+            sys.exit(1)
 
     env = detect_environment()
 
@@ -394,7 +445,23 @@ def main():
     elif is_chinese_name(args.ticker) and not args.force_name:
         stage1_result = _stage1(args.ticker)
         # v2.10.4 · ETF/指数/可转债早退：stage1 已写 _resolve_error.json + 成分股清单
+        # v3.4.0 · ETF/LOF 改为持仓循环分析（用户二次确认）
         if isinstance(stage1_result, dict) and stage1_result.get("status") == "non_stock_security":
+            sec_type = stage1_result.get("security_type", "")
+            if sec_type in ("etf", "lof", "mutual_fund") and stage1_result.get("top_holdings"):
+                print(f"\n💡 {args.ticker} 是 {stage1_result.get('label', sec_type.upper())} · v3.4.0 起支持循环分析持仓股")
+                from lib.fund_holdings_runner import confirm_and_run_holdings
+                auto_yes = os.environ.get("UZI_FUND_AUTO_YES") == "1"
+                fund_result = confirm_and_run_holdings(
+                    stage1_result.get("ticker", args.ticker),
+                    stage1_result.get("label", "ETF/LOF"),
+                    stage1_result["top_holdings"],
+                    depth=os.environ.get("UZI_DEPTH", "medium"),
+                    auto_yes=auto_yes,
+                )
+                if fund_result.get("status") == "completed":
+                    print(f"\n✅ 持仓批量分析完成 · 汇总报告: {fund_result['summary_html']}")
+                sys.exit(0)
             print(f"\n{'━' * 50}")
             print(f"🔴 {args.ticker} 是 {stage1_result.get('label', '非个股标的')}，已跳过 stage2。")
             print(f"   请选择上面列出的成分股之一重跑。")
@@ -441,16 +508,42 @@ def main():
                 args.ticker = resolved
     else:
         result = run_analysis(args.ticker)
-        # v2.10.4 · ETF/指数/可转债早退（stage1 已输出成分股清单，不生成报告）
+        # v2.10.4 · ETF/指数/可转债早退（stage1 已输出成分股清单）
+        # v3.4.0 · ETF/LOF 不再早退 · 改为询问用户是否循环分析持仓
         if isinstance(result, dict) and result.get("status") in ("non_stock_security", "name_not_resolved"):
             print(f"\n{'━' * 50}")
             status = result.get("status")
             if status == "non_stock_security":
-                print(f"🔴 {args.ticker} 是 {result.get('label', '非个股标的')}，已跳过 stage2。")
-                if result.get("top_holdings"):
-                    print(f"   请从上方列出的成分股里选一只重跑，例如：python run.py {result['top_holdings'][0]['code']}")
+                sec_type = result.get("security_type", "")
+                # v3.4.0 · ETF/LOF 走持仓循环分析（用户二次确认）· 可转债 / 指数仍 early-exit
+                if sec_type in ("etf", "lof", "mutual_fund") and result.get("top_holdings"):
+                    print(f"💡 {args.ticker} 是 {result.get('label', sec_type.upper())} · v3.4.0 起支持循环分析持仓股")
+                    print(f"{'━' * 50}")
+                    from lib.fund_holdings_runner import confirm_and_run_holdings
+                    auto_yes = os.environ.get("UZI_FUND_AUTO_YES") == "1"
+                    fund_result = confirm_and_run_holdings(
+                        args.ticker, result.get("label", "ETF/LOF"),
+                        result["top_holdings"],
+                        depth=os.environ.get("UZI_DEPTH", "medium"),
+                        auto_yes=auto_yes,
+                    )
+                    if fund_result.get("status") == "completed":
+                        print(f"\n✅ 持仓批量分析完成 · 汇总报告: {fund_result['summary_html']}")
+                        # 报告路径设为 summary html 让后续 cloudflare/browser 能打开
+                        from pathlib import Path as _P
+                        summary_path = _P(fund_result["summary_html"])
+                        if summary_path.is_absolute():
+                            args._fund_summary_path = summary_path
+                        else:
+                            args._fund_summary_path = (SCRIPTS_DIR / summary_path).resolve()
+                    sys.exit(0)
                 else:
-                    print(f"   {result.get('what_to_do', '请改用个股代码重跑。')}")
+                    # 可转债 / 指数 / 拉不到持仓 · 仍 early-exit
+                    print(f"🔴 {args.ticker} 是 {result.get('label', '非个股标的')}，已跳过 stage2。")
+                    if result.get("top_holdings"):
+                        print(f"   请从上方列出的成分股里选一只重跑，例如：python run.py {result['top_holdings'][0]['code']}")
+                    else:
+                        print(f"   {result.get('what_to_do', '请改用个股代码重跑。')}")
             else:
                 print(f"🔴 {args.ticker} 股票名无法解析")
             print(f"{'━' * 50}")
@@ -482,6 +575,50 @@ def main():
     print(f"\n{'━' * 50}")
     print(f"📄 报告路径: {standalone}")
     print(f"   大小: {standalone.stat().st_size // 1024} KB")
+
+    # v2.11.0 · --output-dir：把报告整目录复制到指定路径，便于 SaaS / 平台集成
+    if args.output_dir:
+        import json
+        from datetime import datetime as _dt
+        out = Path(args.output_dir).resolve()
+        out.mkdir(parents=True, exist_ok=True)
+        try:
+            for item in report_dir.iterdir():
+                target = out / item.name
+                if item.is_dir():
+                    if target.exists():
+                        shutil.rmtree(target)
+                    shutil.copytree(item, target)
+                else:
+                    shutil.copy2(item, target)
+            index_target = out / "index.html"
+            shutil.copy2(standalone, index_target)
+
+            one_liner = ""
+            ol_path = report_dir / "one-liner.txt"
+            if ol_path.exists():
+                try:
+                    one_liner = ol_path.read_text(encoding="utf-8").strip()
+                except Exception:
+                    pass
+
+            meta = {
+                "schema": 1,
+                "ticker": args.ticker,
+                "depth": args.depth or os.environ.get("UZI_DEPTH") or "medium",
+                "generated_at": _dt.utcnow().isoformat() + "Z",
+                "report_dir": str(report_dir),
+                "standalone": standalone.name,
+                "index": "index.html",
+                "size_kb": standalone.stat().st_size // 1024,
+                "one_liner": one_liner,
+            }
+            (out / "report.meta.json").write_text(
+                json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+            print(f"   📦 已导出到: {out}/index.html")
+        except Exception as _e:
+            print(f"⚠️  --output-dir 导出失败（不影响本地报告）: {_e}")
 
     # 打开浏览器（本地模式）
     if env["has_browser"] and not args.no_browser and not args.remote:

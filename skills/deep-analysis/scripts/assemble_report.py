@@ -269,7 +269,7 @@ def render_dim_card(dim_key: str, dim_score: dict, raw_dim: dict) -> str:
         pf_html += '</div>'
 
     badge_cls = "fallback" if fallback else "live"
-    badge_text = "网络搜索" if fallback else source_label
+    badge_text = "公开信息" if fallback else source_label
 
     # raw data dump (collapsible)
     import json as _j
@@ -293,7 +293,7 @@ def render_dim_card(dim_key: str, dim_score: dict, raw_dim: dict) -> str:
   {viz_html}
   {kpi_html}
   {pf_html}
-  <div class="dim-source">数据来源: <span class="badge {badge_cls}">{badge_text}</span> <span style="opacity:.65">{source}</span></div>
+  <div class="dim-source">数据来源: <span class="badge {badge_cls}">{badge_text}</span></div>
   <details>
     <summary>查看原始数据 ▼</summary>
     <pre>{raw_dump}</pre>
@@ -333,6 +333,7 @@ from lib.report.institutional import (  # noqa: E402, F401
     _render_initiating_coverage, _render_ic_memo, _render_catalyst_calendar,
     _render_competitive_analysis, _render_style_chip,
     _render_data_gap_banner, _render_institutional_section,
+    _render_school_lock_banner,
 )
 
 
@@ -411,7 +412,10 @@ def assemble(ticker: str) -> Path:
         "{{INDUSTRY}}": str(_safe(basic.get("industry"))),
         "{{OVERALL_SCORE}}": str(syn.get("overall_score", 0)),
         "{{OVERALL_SCORE_INT}}": str(int(syn.get("overall_score", 0))),
-        "{{VERDICT_LABEL}}": _safe(syn.get("verdict_label")),
+        # v3.4.1 · verdict_label 后追加 detail（基本面/共识精确分）让相近 verdict 段的票仍能区分
+        "{{VERDICT_LABEL}}": _safe(syn.get("verdict_label")) + (
+            f" · {syn['verdict_detail']}" if syn.get("verdict_detail") else ""
+        ),
         "{{TRAP_LEVEL}}": trap_level,
         "{{TRAP_COLOR}}": trap_color,
         "{{TRAP_EMOJI}}": trap_emoji,
@@ -561,9 +565,14 @@ def assemble(ticker: str) -> Path:
     )
 
     # v2.3 · Data quality banner (only renders when synthesis.data_gaps present)
+    # v3.4.4 · 传 raw 让 banner 检测 ETF/基金类型 · 优化文案避免误判可信度
+    # v3.4.5 · 传 syn 让 banner 检测 low-confidence（fund_score 偏低 + 覆盖率低）
+    # v3.5.0 · 在 data_gap_banner 上方追加 school_lock_banner（用户锁定流派视角）
+    school_lock_html = _render_school_lock_banner(syn)
+    data_gap_html = _render_data_gap_banner(syn.get("data_gaps"), raw=raw, syn=syn)
     template = template.replace(
         "<!-- INJECT_DATA_GAP_BANNER -->",
-        _render_data_gap_banner(syn.get("data_gaps")),
+        school_lock_html + data_gap_html,
     )
 
     # v2.7 · Style chip (动态加权说明，只在 detected_style 存在时渲染)

@@ -7,6 +7,471 @@
 
 ---
 
+## v3.6.3 (2026-06-03 · 重磅角色 Serenity · AI 卡位/瓶颈猎手 I 组)
+
+### BUG · Serenity 卡位关键词库漏掉 AR/消费光学，把光学股误判成「不在 AI 链」
+
+- **症状**：实测 `python run.py 002273 --depth lite`（水晶光电，真实行业「光学光电子」· AR/VR + 车载光学 + iPhone 相机模组 · 市值 404 亿）· Serenity 给出 `bearish / 0`，headline「不在 AI 产业链上 —— 对我没有意义」。但水晶光电明显踩在 AR/AI 光学链上，应识别为「在链但卡位不够硬 → neutral」，而非一票否决。
+- **位置**：`skills/deep-analysis/scripts/lib/stock_features.py` · 派生特征 `ai_chokepoint_score` 的 `_AI_CHOKEPOINT_KW` 关键词库
+- **根因**：关键词库只覆盖了**数据中心光**（光模块/CPO/光通信/光器件/激光器）+ 先进封装 + 化合物半导体 + 互连 + 算力，**漏了 AR/消费/车载光学族**（光学/光电子/光学元件/光波导/滤光片/镀膜/棱镜/镜头/相机模组/AR-VR/近眼显示/车载光学）。`光学光电子` 行业整段命中 0 词 → `ai_chain_hit=False` → 直接腰斩到 score≈0。
+- **影响**：所有 AR/VR/消费光学/车载光学方向的真实卡位候选（水晶光电、蓝特光学、舜宇、长光华芯等）会被 Serenity 误判为「不在 AI 链」而错杀，丧失「在链→再按不可替代性/市值判断」的分级能力。
+- **修法**：`_AI_CHOKEPOINT_KW` 扩充一组 AR/光学终端侧词条。**注意刻意不加裸词 `ar`/`vr`/`mr`**（会在 lowercase 的 JSON blob 里匹配到 market/margin/warrant 等英文子串造成全局误命中）· 改用中文词（增强现实/虚拟现实/混合现实/头显/近眼显示）+ 带斜杠的 `ar/vr` + `ar眼镜`。
+- **验证**：
+  - 水晶光电真实数据重评 → `ai_chain_hit=True`（命中 光学/光电子/相机模组/ar-vr/车载光学）· 卡位分 70.1 · 但不可替代=False(切换5+规模6=11<12) + 市值404亿>300 → **neutral / 59**「命中 AI 链但可替代性偏高、市值偏大，不是真瓶颈」（地道的 Serenity 视角）
+  - `test_serenity_rules.py` 7 项不破：白酒(高粱酿造)/银行(存款贷款) 仍 `ai_chain_hit=False` → bearish（无 AR/光学词误命中）
+  - 全量 532 passed
+- **未来改该区域注意事项**：
+  - **永远不要在 `_AI_CHOKEPOINT_KW` 加 2 字母以内的裸英文词**（ar/vr/mr/ic/ai 单独）· blob 是 lowercase 拼接的中英文 + JSON · 短英文子串必然误命中。要加英文必须够长够特异（waveguide / micro-led / cowos）。
+  - 扩词只影响 `ai_chain_hit` 这道**门槛**；是否 bullish 仍由 `chokepoint≥70 + 不可替代 + 中小市值` 三条 weight-5 规则把关。所以扩词宁可**宽进严出**，不会让普通光学股变成 Serenity 重仓。
+  - 改词库后必跑 `test_serenity_rules.py::test_bearish_on_non_ai_regardless_of_moat`（确保非 AI 股仍被否）。
+
+---
+
+## v3.6.2 (2026-06-03 · cninfo 翻页长尾 #68 + install-hermes.sh pip 探测 #69)
+
+### BUG #68 · cninfo 公告分页 854 页拖几小时
+
+- **症状**：用户 [@xy2yp](https://github.com/wbh604/UZI-Skill/issues/68) 反馈 `python run.py --versus 000958 600406 --depth lite` 卡在 15_events 维度 · 进度条 `0/854 [01:53<6:11:58, 26.44s/it]` · 单股 4-6 小时
+- **位置**：`skills/deep-analysis/scripts/fetch_events.py::_cninfo_disclosures`
+- **根因**：调 `akshare.stock_zh_a_disclosure_report_cninfo` · 该 akshare 函数内部用循环翻完全部分页（cninfo 一只票常有 800+ 页公告）才把 DataFrame 返给我们 · 后续 `.head(30)` 截取已无用 · 翻页时间已经花掉了
+- **修法**：
+  1. 新增 `_cninfo_direct_api(code, page_size=30, timeout=15)` · 直接 `requests.post` 到 `http://www.cninfo.com.cn/new/hisAnnouncement/query` · `pageNum=1 + pageSize=30` · 一次 HTTP ≤15s · 永远不翻全部页
+  2. 板块路由：`000/001/002/3xx → szse` · `6xx/688 → sse` · `8xx → bse`
+  3. 响应解析：`announcements[*].announcementTime` (毫秒) / `announcementTitle` / `adjunctUrl` (拼 `http://static.cninfo.com.cn/` 前缀)
+  4. `_cninfo_disclosures` 优先调直连 API · 直连失败时**默认不调 akshare**（防长尾）· 仅 `UZI_AK_CNINFO_FALLBACK=1` 显式启用时才走 akshare 慢路径
+- **验证**：
+  - mock `requests.post` ConnectionError → 返 [] · 不抛
+  - mock 200 + 合法 JSON → 解析正确 / 路由正确
+  - 网络失败 + 未设 fallback env → 不调 akshare（关键 · 防止再次踩坑）
+- **未来改该区域注意事项**：
+  - **永远不要回去用 `ak.stock_zh_a_disclosure_report_cninfo`** · 这是 akshare 实现的死结 · 它会翻完所有页
+  - 直连 API 的 pageSize 上限 cninfo 文档说 30 · 别贪心设大数字（会被服务端拒）
+  - cninfo 的时间戳是 **毫秒** · 不要忘了 `/ 1000` 再 `fromtimestamp`
+  - 板块路由 prefix 列表要保持齐：未来 cninfo 加新板块要更新（如果 北交所 8xx 后还有新代码段）
+
+### BUG #69 · install-hermes.sh 在 Linux 找不到 pip
+
+- **症状**：用户 [@FrankHuy](https://github.com/wbh604/UZI-Skill/issues/69) 在 CentOS-like + Python 3.11 跑一键脚本：`line 95: pip: command not found` + akshare 装不上
+- **位置**：`install-hermes.sh` line ~94（装依赖段）
+- **根因**：很多 Linux 发行版（Debian/Ubuntu/CentOS/RHEL）**默认不提供 plain `pip` 命令** · 用户必须用 `pip3` / `python3 -m pip` · 我们脚本只试 `pip` 直接报错 · 后续 akshare 报"找不到 wheel"其实是因为底层 pip 不存在 · 不是真的 wheel 不兼容
+- **修法**：
+  1. 启动加 Python 版本预检（`python3` → `python` 探测 + 版本 ≥3.10 检查）· 警告而非阻断 · 给三种系统的安装命令
+  2. pip 探测改为 5 层级联：`$HERMES/venv/bin/pip` → `$HERMES/.venv/bin/pip` → `pip` → `pip3` → `$PY_BIN -m pip`
+  3. 全部探测失败 → exit 4 + 给 apt / yum / ensurepip / get-pip 四种安装路径
+  4. `pip install` 失败 → exit 5 + 提示版本/镜像源/升级 pip
+- **验证**：
+  - `bash -n install-hermes.sh` 语法过
+  - 测试 grep 验证脚本含 pip3 / -m pip / tuna.tsinghua / upgrade pip 等关键字
+- **未来改该区域注意事项**：
+  - 不要在主体代码里假设 `pip` 命令存在 · 用 `command -v` 探测
+  - `set -euo pipefail` 严格模式下任何 fail 立即退出 · 必须 *先* 探测再 *用*
+  - 镜像源 fallback 只在文案里建议 · 不要默认走清华源（部分海外用户访问慢）· 让用户主动加 `-i`
+
+---
+
+## v3.6.1 (2026-05-29 · Hermes Skills Guard 假阳性绕过 · issue #66)
+
+### BUG · `hermes skills install` 报 DANGEROUS · `--force` 覆盖不了
+
+- **症状**：用户 @zodiacg ([#66](https://github.com/wbh604/UZI-Skill/issues/66)) 反馈 `hermes skills install wbh604/UZI-Skill/skills/deep-analysis` 失败 · scanner 168 findings · DANGEROUS verdict
+- **位置**：Hermes Skills Guard 模式匹配扫描器（NousResearch/hermes-agent · 上游 bug · 不是 UZI-Skill 的问题）
+- **根因**：Skills Guard 是 v0.x 纯模式匹配 (`r'os\.environ\b'`) · 不区分"读自己配置"vs"窃取用户敏感 env" · 也不识别 docstring / HTML 注释 / opt-in 用户功能
+- **影响**：community 源任何 finding 都会 BLOCK · `--force` 设计上不能覆盖 DANGEROUS · 用户 Hub 装不下来
+- **修法**：提供 `install-hermes.sh` 一键脚本 · `git clone + ln -sfn` 到 `~/.hermes/skills/` · 跳过 Hub quarantine 扫描 · Hermes 跑时只看目录 layout · 完全等价
+- **绝不能做的事**：
+  - ❌ 用 dynamic import + 字符串拼接绕 Skills Guard 检测（这是上游 issue #7072 提到的恶意绕过 · 我们绝不走这条路 · 那是窃取信任模型）
+  - ❌ 删除合法的 `os.environ.get` 代码来降 findings · 那是把功能砍了
+  - ✅ 只提供 clone+symlink 路径 · 用户主动决定信任我们 · 而不是欺骗 Hub 让它判 "safe"
+- **验证**：
+  - `bash install-hermes.sh` 在干净环境跑通 · 4 个 skill symlink + venv pip 装包 + SKILL.md 版本验证
+  - 11 个回归测试 (`test_v3_6_1_install_hermes.py`)
+- **未来改该区域注意事项**：
+  - 若 Hermes Skills Guard 升级到 allowlist 模型 · `hermes skills install` 重新可用时 · 在 INSTALL-HERMES.md 顶部加 "Skills Guard 已修 · 直接 hub 装" 提示
+  - 但 install-hermes.sh 应该保留作为 dev 路径（clone + symlink 让 git pull 立刻生效 · Hub 装是 snapshot）
+  - 改 skill 目录结构时 · 必须同步更新脚本里的 `SKILLS=(deep-analysis ...)` 数组
+  - 永远不要"为了 Skills Guard 评分好看"砍合法功能 · `--remote` cloudflared 是用户主动 opt-in · 默认不跑
+
+---
+
+## v3.6.0 (2026-05-29 · 视觉升级 + 多股对比 + 组合分析)
+
+### FEATURE A1 · 暗色模式 toggle
+
+- **位置**：`assets/report-template.html`（CSS `:root` + `[data-theme="dark"]` 块 · 末尾 `<script>` toggle 段）
+- **改动**：
+  1. 新增 `[data-theme="dark"]` 块 · 30+ 个 CSS 变量重定义（slate-900 风 + 提亮 neon）
+  2. topbar 加 `<button id="theme-toggle">` · 默认 🌙 / 切换后 ☀️
+  3. JS 初始化优先级：`localStorage.getItem('uzi-theme')` > `prefers-color-scheme: dark` > light
+  4. 持久化：每次 toggle 都写 `localStorage` · 跨刷新生效
+- **未来改该区域注意事项**：
+  - 加新 CSS 变量时 · 必须同时在 `:root` 和 `[data-theme="dark"]` 都定义 · 否则暗色模式回退到 light 默认值
+  - 不要硬编码 `#000000 / #ffffff` · 必须用 `var(--text-bright)` 等抽象
+
+### FEATURE A2-3 · sticky TOC + count-up
+
+- **位置**：`assets/report-template.html`（CSS `.toc-rail`/`.toc-item` · HTML `<nav class="toc-rail">` · 8 个 `id="section-X"` 锚点 · JS 末尾段）
+- **改动**：
+  1. 给 8 个 section-head div 加 `id="section-{core/clash/jury/chat/scan/modeling/risks/zones}"`
+  2. 左侧 `.toc-rail` fixed 50% · `@media (max-width:1280px)` 隐藏
+  3. JS 用 IntersectionObserver `rootMargin: '-30% 0px -50% 0px'` 命中段加 `.active` class
+  4. count-up：找 `.score-giant, .sc-score-giant, .hero-score-num, .confidence` · 进入视口动画
+- **未来改该区域注意事项**：
+  - 增减章节时必须同步：HTML section id + TOC `<a href="#X">` + 顺序 · 不一致会出现 active 跳到错位置
+  - count-up selector 用类名匹配 · 改样式时不要把 `.score-giant` 重命名 · 否则动画失效
+
+### FEATURE A4 · 金融术语悬浮 tooltip · 🔒 XSS 安全加固
+
+- **位置**：`assets/report-template.html`（JS 末尾 `TERMS` dict + `tooltipify` 函数）
+- **改动**：
+  1. `TERMS` dict 含 12 个核心术语（PE/PB/ROE/DCF/IRR/WACC/EV-EBITDA/LBO/YTD/TTM/PEG/LHB）
+  2. 扫描 `.panel-insights / .dim-card .body / .friendly-layer / .risk-box / .punchline / .dim-row / .school-scores .desc / .round-bull / .round-bear / .qr-desc` 内 text node
+  3. 用 `createDocumentFragment + createElement('span') + textContent + setAttribute('data-tip', ...)` 安全构造 · 不用 `innerHTML`
+  4. 词条按长度降序匹配 · `\\b` 边界 + RegExp 防止 PE 误匹配 PEG
+- **安全要点**：
+  - **永远不要用 `node.innerHTML = ...` 处理动态术语 / 用户数据**（XSS 风险）
+  - `textContent` 自动转义 · `setAttribute` 也安全 · 是首选
+  - 测试 `test_tooltipify_uses_safe_dom_no_innerhtml` 守护这一点
+- **未来改该区域注意事项**：
+  - 加新术语只需扩 `TERMS` dict
+  - 不要为了"省事"用 innerHTML 拼接 — 这是 security hook 检查项
+  - 长术语在前（`EV/EBITDA` 在 `PE` 前）· 防止短词先匹配吞掉长词
+
+### FEATURE A5 · 报告 QR 码
+
+- **位置**：`assets/report-template.html`（CSS `.share-qr-card` · HTML 在 buy-zones 之后 share button 之前 · JS `drawQR` 函数）
+- **改动**：
+  1. `<canvas id="report-qr-canvas">` 200×200 · 用 Google Chart API (`api.qrserver.com`) 远程生成
+  2. file:// 协议下不调 API · 用 `canvas.getContext('2d').fillText` 提示用 `--remote`
+  3. 网络失败 fallback · 显示 "QR offline"
+- **未来改该区域注意事项**：
+  - QR 服务商可换 · 但接口签名 `data=<url>` 通用 · 不要硬编码尺寸到 URL
+  - 不要 innerHTML 注入 URL · 用 canvas 2D 绘图安全
+
+### FEATURE B · 多股横向对比 `--versus`
+
+- **位置**：`lib/versus_runner.py` (新文件 380 行) · `run.py` argparse + 早返回段
+- **核心函数**：
+  - `_load_cache(ticker)` → bundle{syn, raw, panel}
+  - `_extract_metrics(bundle)` → 12 个核心字段 dict
+  - `_winner(values, higher_is_better)` → winner index · 全空返 -1 · 跳过 0
+  - `_render_comparison_grid(stocks)` → table HTML · ★ WIN 标注
+  - `_render_html(stocks, depth)` → 完整 HTML（复用主模板 CSS）
+  - `run_versus(tickers, depth, auto_open)` → dispatch
+- **不破坏现有行为**：
+  - `--versus` 早返回 · 不影响单股分析路径
+  - 输入校验 2-4 只 · 其他长度 invalid_input
+- **未来改该区域注意事项**：
+  - 改 `ROWS` 加新对比维度时 · winner 高低需明确（`higher_is_better` 字段）· None=不比
+  - 模板 CSS 路径用 `ASSETS_DIR` 常量 · `.parents[1]` 推算 scripts dir · 不要硬编码
+  - `_render_html` 复用主模板 `<style>` 块 · 主模板改 CSS 时这里自动跟随
+  - dark-toggle JS 简化版 (无 TOC/jargon) · 未来如需统一 · 抽 `assets/shared-theme.js`
+
+### FEATURE C · 组合批量分析 `--portfolio CSV`
+
+- **位置**：`lib/portfolio_runner.py` (新文件 370 行) · `run.py` argparse + 早返回段
+- **核心函数**：
+  - `_parse_csv(path)` → list[{ticker, weight, note}] · 容错 header / 中英文 / 0-100
+  - `_normalize_weights(holdings)` → 归一化到 sum=1.0 · 缺失均分 / 部分缺剩余均分 / 总和 > 1 重归一
+  - `_portfolio_health(metrics)` → {weighted_score, max_weight, n_industries, verdict}
+  - `_render_html` → 排名表 + KPI grid + metadata.json
+  - `run_portfolio(csv, depth, auto_open, portfolio_name)` → dispatch
+- **CSV 容错**：
+  - header 兼容：ticker / code / symbol / 股票 / 代码 · weight / 权重 / 仓位 / pct / 比例
+  - weight 0-1 视为比例 · >1 自动除以 100
+  - 无 header 时假设单列 ticker · weight 平均
+- **未来改该区域注意事项**：
+  - CSV header 加新别名时 · 必须加到 `tk_keys / wt_keys / note_keys` 列表
+  - 健康度门槛是 hardcode（weighted_score>=70, max_weight<0.40, n_industries>=3）· 改阈值要同时改测试
+  - metadata.json schema 是 SaaS 契约 · 加字段 OK · 改既有字段必须升 schema 版本
+  - 失败容忍：单只 fail 进 `failed[]` 不阻断 · 但全失败返 insufficient_data
+
+### Phase D 暂缓说明（v3.7 范围）
+
+`--sector LED` 板块全扫 + `--as-of 2024-Q3` 历史复盘 都需要：
+- fetcher 接受 `as_of_date` 参数 · 走历史接口（baostock query_history_k_data_plus 已支持但 akshare 大多不支持）
+- 板块扫需 industry → tickers 映射表 · 跨数据源对齐
+
+工作量大 + 涉及数据层重构 · 留到 v3.7 单独迭代。
+
+---
+
+## v3.5.0 (2026-05-29 · 单一流派视角锁定 `--school` + SaaS 集成 `--output-dir`)
+
+### FEATURE · `--school A/B/C/D/E/F/G` 单一流派视角锁定（社群反馈）
+
+- **背景**：用户反馈 "我只想看 F 派游资视角 · 不想 51 评委一起 vote"。51 评委 vote 出来的共识在某些场景下不是用户想要的视角（如纯游资打板 / 纯价值长线）
+- **位置**：
+  - `lib/investor_evaluator.py::evaluate` 入口段
+  - `lib/pipeline/score_fns.py::synthesize` return 段
+  - `lib/report/institutional.py::_render_school_lock_banner` 新函数
+  - `run.py::main` argparse 段
+  - `SKILL.md` HARD-GATE-SCHOOL-LOCK
+- **改动**：
+  1. `run.py` argparse 新增 `--school` choices=[A,B,C,D,E,F,G] · 触发后 set `os.environ["UZI_SCHOOL"]`
+  2. `investor_evaluator.get_locked_school()` 读 env + 大小写归一 + 合法性校验
+  3. `evaluate()` 顶部检查 · `inv_group != locked` → `_skip_result("用户锁定 X 派视角")` 不进规则引擎/persona
+  4. `score_fns.synthesize` 把 `school_lock={group, label}` 编码进 synthesis · 让报告层无需读 env
+  5. `_render_school_lock_banner(syn)` · 7 派各自配色 + 代表评委提示 · 渲染在 data_gap_banner 上方
+  6. `SKILL.md` 加 HARD-GATE · agent role-play 时只 role-play 该派 5-8 人 · `panel_insights` 不写跨派对比 · `great_divide_override.bull_say_rounds/bear_say_rounds` 限于该派内
+- **兼容 v3.4.5**：锁定 F 派 + 京东方 (2000 亿) · F 派 23 人按 LHB 反查机制 · 实际上榜的赵老哥/孙哥仍参与评分（不会因射程超限而二次 skip）
+- **未传 `--school` 时行为 100% 兼容**：`get_locked_school()` 返 "" · 全 51 评委正常 vote · banner 不渲染（_render_school_lock_banner 返 ""）
+- **验证**：
+  - `UZI_SCHOOL=F python3 -c "from lib.investor_evaluator import evaluate; print(evaluate('buffett', {...}))"` → signal=skip · reason 含"锁定 A 股游资 派视角"
+  - `_render_school_lock_banner({"school_lock":{"group":"F","label":"A 股游资"}})` → 包含 "SCHOOL LOCK" + "赵老哥" + 深红配色
+  - 11 个回归测试 (`test_v3_5_0_school_lock.py`) 全过
+- **未来改该区域注意事项**：
+  - `UZI_SCHOOL` env 大小写归一在 `get_locked_school()` 内完成 · 不要在其他位置再做 upper() 否则双重转换会失效
+  - 非 A-G 的 group 字符串（实验派 / 未分类）也会被 skip · 不要假设所有评委都有 group · 必要时检查 `_INVESTOR_GROUP_MAP.get(id, "")`
+  - `_render_school_lock_banner` 的 THEMES dict 必须包含所有 7 派 · 加新派时记得同步 SCHOOL_LABELS + THEMES + 测试
+  - synthesis.school_lock 是 dict 或 None · 不要写 ""（空字符串）· 测试 `if syn.get("school_lock")` 会过 None 但不会过 dict（即使 group=""）
+  - agent role-play 时 · 即使 panel.json 里非该派评委有 skip 状态 · 也不要 override 他们的 signal · 用户预期就是只看该派
+
+### FEATURE · `--output-dir` CLI flag · 供 uzi-platform 集成
+- **背景**：把 UZI-Skill 包装成 SaaS（`uzi-platform/`），后端 Celery worker 需要稳定产物路径挂载到 web 报告页
+- **位置**：`run.py::main` argparse 段 + 报告找到后的拷贝段（≈ line 530）
+- **改动**：
+  1. argparse 新增 `--output-dir DIR`
+  2. 报告路径确定后，把整目录（含 avatars / share-card.png / war-report.png / one-liner.txt）拷到该目录
+  3. `full-report-standalone.html` 额外复制一份为 `index.html`，便于平台直接服务
+  4. 生成 `report.meta.json`（schema=1 · ticker / depth / generated_at / one_liner / size_kb），供后端落 DB
+  5. 拷贝失败不影响本地报告生成（silent fallback + warning）
+- **不破坏现有行为**：未传 `--output-dir` 时与改动前完全一致；--remote / --no-browser / browser open 路径全部保留
+- **验证**：
+  - 不传 `--output-dir`：本地 `reports/{ticker}_{date}/` 仍正常生成（既有测试覆盖）
+  - 传 `--output-dir /tmp/x`：`/tmp/x/index.html` + `/tmp/x/report.meta.json` 存在且 size > 0
+- **未来改该区域注意事项**：
+  - `report.meta.json` 的 schema 字段是 SaaS 后端契约 · 加字段 OK · **改/删既有字段必须升 schema 版本号**
+  - 拷贝用 `shutil.copytree` 已存在目录会先删 · 不要把用户的 `--output-dir` 设为非空业务目录
+  - `index.html` 永远是 `full-report-standalone.html` 的副本（self-contained · 不依赖 avatars/） · 不要改为 `full-report.html`（会拉 share-card.png CDN）
+
+---
+
+## v3.4.5 (2026-05-12 · F 派 LHB 反查 + low-confidence banner)
+
+### BUG 1 · F 派游资遇大盘股 100% skip · 与 LHB 实际数据脱节
+- **症状**：用户跑京东方 000725（约 2000 亿市值）· 51 评委里 F 派 23 人全 skip · 但 LHB 实际显示 3-5 个游资参与涨停博弈
+- **位置**：`lib/investor_evaluator.py::_is_youzi_out_of_range`
+- **根因**：v2.13.3 加的市值射程检查没考虑 LHB 实际数据 · 只看 SEATS[nickname] 的 fit_rules max_mcap · 超出就硬 skip
+- **修法**：检测 `features["matched_youzi"]`（fetch_lhb.match_seats_in_lhb 反查的 30 天上榜游资昵称 list）· 若该游资在里面 · 即使市值超射程也不 skip
+- **回归测试**：4 个测试覆盖 (无 LHB skip / 有 LHB active / 射程内 / 非 F 派)
+- **未来注意**：
+  - `matched_youzi` 是 list[str]（nickname）· 不是 list[dict]
+  - 仅对 F 派（_INVESTOR_GROUP_MAP）生效 · A/B/C/D/E/G 派不受影响
+  - 加新游资到 SEATS 时 · 用 list 兼容（不是 set）· 否则 nickname in matched 会失败
+
+### BUG 2 · fund_score 偏低但缺数据时无警告 · 用户误判可信度
+- **症状**：京东方实测 fund_score=37.6 · 但 agent 重评 65/100 · 报告无任何"评分不可信"提示 · 用户读到 0/24 票数会误以为应清仓
+- **位置**：`lib/report/institutional.py::_render_data_gap_banner`
+- **根因**：score_dimensions 对缺数据维度给默认中性 5-6 分 · 多维缺失时会人为拉低 fund_score · 但 banner 没区分"评分可信"vs"评分受缺数据干扰"
+- **修法**：`_render_data_gap_banner(data_gaps, raw, syn)` 新增 syn 参数 · 检测 stock + fund_score<50 + cov<60% → 渲染 low-confidence 红色 banner · 引导用户看 agent 重评
+- **未来注意**：
+  - 阈值 fund_score<50 + cov<60% 是经验值 · 京东方/类似缺数据股的实测 · 调整需更新测试
+  - low-confidence banner 只对 stock 触发 · ETF/LOF 走 fund-type banner（v3.4.4）
+  - 不传 syn 时向后兼容 · 走老 banner
+  - 用红色调 #7f1d1d/#b91c1c · 区别于橙色（普通缺数据警告）+ 蓝色（基金类型）
+
+---
+
+## v3.4.4 (2026-05-12 · data_gap_banner UX 优化)
+
+### UX BUG 1 · ETF 17% 覆盖率让用户误判可信度
+- **症状**：用户反馈"ETF 报告数据覆盖率 17% · 会不会影响可信度"
+- **位置**：`lib/report/institutional.py::_render_data_gap_banner`
+- **根因**：原 banner 不区分 stock vs ETF/基金 · 对基金来说"缺 ROE/PE"是字段本身没有 · 不是采集失败 · 但 banner 用同样的"⚠️ DATA QUALITY 警告"措辞让用户误以为不可信
+- **修法**：
+  1. `_render_data_gap_banner(data_gaps, raw=None)` 新增 raw 参数
+  2. 检测 `basic.security_type` 或 `raw.security_type` · 或 ticker 反推 (调 `classify_security_type`)
+  3. ETF/LOF/mutual_fund → 渲染 `data-gap-banner fund-type` 蓝色调 banner · 文案"FUND-TYPE NOTE · 字段差异属预期·不影响可信度·去看前 10 大持仓股"
+  4. 普通 stock 走老 banner · 向后兼容
+- **未来注意**：
+  - 新增 sec_type 时 · 更新 `is_fund_like` 检测逻辑
+  - raw 传入是可选参数 · 不传时走老 banner（不要 break 现有 caller）
+  - ticker 反推依赖 `lib.market_router.classify_security_type` · 改前缀规则要回归测试
+
+### UX BUG 2 · banner 橙底橙字对比度不足
+- **症状**：banner subtitle `<strong>` 用 `#f59e0b` 浅橙 · 在 12% 橙色背景上几乎看不清；chip 用 `#fbbf24` 亮橙更糟
+- **位置**：`assets/report-template.html` `.data-gap-banner` 系列 CSS
+- **修法**：
+  - title `#f59e0b` → `#92400e` 深棕
+  - subtitle strong `#f59e0b` → `#7c2d12` 深棕红 + font-weight 800
+  - chip text `#fbbf24` → `#7c2d12` + font-weight 600
+  - subtitle 正文 `var(--text-bright)` → `#1f2937` 深灰（避免主题色干扰）
+  - 左边条 `#f59e0b` → `#b45309` 深棕色（更醒目）
+  - 新加 `.data-gap-banner.fund-type` 蓝色调 CSS (#0369a1 + #0c4a6e)
+- **回归测试**：`tests/test_v3_4_4_banner_ux.py` 11 个测试 · 含 CSS 颜色字符串断言（守护回归）
+- **未来注意**：
+  - 任何 banner 文字颜色都必须在浅橙背景上 WCAG AA 通过 · 不要用 `#fXXXXX` 系列浅橙做文字
+  - 信息性提示用蓝色调 · 警告/错误才用橙红色 · 维持视觉语义一致
+
+---
+
+## v3.4.3 (2026-05-12 · 开放式基金分类修复 + 字段级 fallback gate)
+
+### BUG #60-followup · 开放式基金被误判为 convertible_bond
+- **症状**：用户输 110011（易方达优质混合）→ classify_security_type 返 `convertible_bond` → early-exit · v3.4.0 加的 fund_holdings_runner 无机会触发
+- **位置**：`lib/market_router.py::classify_security_type`
+- **根因**：仅按前缀规则分类 · 110xxx 既是 SH 老转债前缀 也是开放式基金代码 · 同样 005xxx 不是股票前缀但是基金
+- **修法**：
+  1. 新增 `SecurityType` literal `mutual_fund`
+  2. 在判 `convertible_bond` 之前 · 用 `akshare.fund_name_em()` 二次校验（懒加载 + 全表 set 缓存）· 基金代码优先识别为 mutual_fund
+  3. 对不在 stock 前缀的码段（如 005xxx）· 也查一下基金清单
+  4. run.py + preflight_helpers 把 mutual_fund 路由到 fund_holdings_runner
+- **验证**：110011 → mutual_fund ✅ · 113008 真转债 → cb ✅（不误伤）
+- **回归测试**：`tests/test_v3_4_3_mutual_fund_classification.py` (6 tests)
+- **未来改该区域注意事项**：
+  - `_is_mutual_fund_code` 是懒加载 module-level 缓存 · 单进程内只下载一次 · 不要在 hot path 调
+  - `fund_name_em` 失败时 silent fallback 到老前缀规则 · 不抛异常（保证向后兼容）
+  - 新增 sec_type 时 · run.py 两处分支 + preflight + fetch_basic 四处都要加路由
+  - `akshare.fund_portfolio_hold_em` 对 ETF/LOF/mutual_fund 都 work · 不需为 mutual_fund 单独写持仓拉取
+
+### REFACTOR (PR #63) · A 股 basic 字段级 fallback gate
+- **症状**：xueqiu 拿到 price/PE/PB 但 name 空 → early return 跳过后续 fallback · 报告 name 永远显示为空
+- **位置**：`lib/data_sources.py` · 新增 `_ensure_a_share_basic_fields` gate
+- **根因**：之前 fallback 是 source-level（一个源 ok 就 early return）· 没做字段级 patch
+- **修法**：新增 `_merge_missing_basic_fields` · 仅填空不覆盖 · 4 个早 return 点全部走 `_ensure_a_share_basic_fields` 字段级 gate · 备用源链 tencent_qt → baostock → ak_code_name → known_industry
+- **验证**：茅台 600519 拿到 name=贵州茅台 / price / pe_ttm / pb / industry=白酒Ⅱ / listed_date 全字段
+- **未来改该区域注意事项**：
+  - `_merge_missing_basic_fields` 默认只填指定字段集 · 加新字段需更新 `fields` 元组
+  - `_fallback_snap` 标记会去重 · 别在 hot loop 里反复 append 同 marker
+  - `_ensure_a_share_basic_fields` 调用应在所有主 fallback 之后 · 否则被覆盖
+
+---
+
+## v3.4.2 (2026-05-11 · Windows + Clash Schannel TLS 兼容 · baostock 双 fallback)
+
+### BUG · Windows Python + Schannel TLS 与东财不兼容 · PE/PB/ROE 全空
+- **症状**：Windows + Clash 用户跑分析 · 所有 eastmoney 链路（xueqiu / push2 / baidu / tencent_qt）全挂 · 报告里 PE/PB/ROE 全 `—`
+- **位置**：`lib/data_sources.fetch_basic` 链 + `fetch_financials.py::_fetch_a_share`
+- **根因**：Windows Python 默认用 Schannel（系统 TLS）· 东财接口与 Schannel 兼容性差. Clash 国内规则 DIRECT → 仍走 Schannel · 代理救不了
+- **不能修的事**：Schannel 本身没法修（需要换 Python TLS backend 或改 Clash 规则让 eastmoney 走代理）
+- **能修的事**：增加 baostock fallback · 它走自有协议（非 HTTPS）· 完全绕过 SSL 兼容性
+- **修法**（2 处 fallback）：
+  1. `fetch_basic` · 在 tencent_qt 之后追加 baostock · `query_history_k_data_plus` 拿 peTTM/pbMRQ/close · `query_stock_basic` 拿 code_name/ipoDate
+  2. `fetch_financials._fetch_a_share` · 当 ROE/revenue_history/net_margin 都空时触发 baostock · 拉 5 年季报 + 解析 roeAvg/MBRevenue/npMargin/gpMargin
+- **验证**：baostock 茅台 sh.600519 实测拿到 peTTM=20.4 / pbMRQ=7.15 / ROE=19.25% / 净利率 52.6% / 营收 893.5 亿
+- **回归测试**：`tests/test_v3_4_2_baostock_fallback.py` (6 tests · 含真机烟雾测试)
+- **未来改该区域注意事项**：
+  - **不要在 baostock fallback 段直接覆盖正常数据**：fetch_financials 检查 `needs_fallback = not roe and not revenue_history and not net_margin` · 仅当核心字段全空才触发 · 否则会让正常拿到数据的票被 baostock 覆盖（baostock 季报较慢 · 可能不是最新）
+  - baostock `query_profit_data` 返回 ROE/Margin 都是**小数**（0.19 = 19%）· 渲染前必须 ×100
+  - 不要把 baostock 当主源 · 它季度数据更新比 akshare 慢 1-3 天 · 仅当主源失败时启用
+  - baostock 服务端要求 ≥0.9.1（v3.4.0 已锁版本）
+
+---
+
+## v3.4.1 (2026-05-11 · verdict 粒度细化 · 相近股票可区分)
+
+### BUG · 50-65 verdict 段过宽 · 神剑(58) + 博云(59.9) 都判 "观望优先" 看不出差异
+- **症状**：用户反馈"神剑股份、博云新材 这两支其实买入逻辑也不一样，但评分一致"
+- **位置**：`lib/pipeline/score_fns.py::generate_synthesis` line 980+ verdict ladder
+- **根因**：v2.11 verdict 5 档 (80/65/50/35) · 50-65 "观望优先" 跨度 15 分 · 神剑 58 + 博云 59.9 都在里面 · 用户感知一致
+- **真实差异**：流派分上有差距（成长派 +13 · 中式价投 +15）· overall 也差 1.9 · 但被 verdict 段掩盖
+- **修法**（3 层细化 · 不动核心 fund_score 公式以避免破坏白马评分）：
+  1. verdict 7 档：80/70/65/60/55/50/35 (50-65 拆三档 · 65-70 加偏弱)
+  2. verdict label 追加 "X 派看多 / Y 派看空"
+  3. synthesis 加 verdict_detail = "基本面 X · 共识 Y" · assemble_report 渲染时追加显示
+- **回归测试**：`tests/test_v3_4_1_verdict_granularity.py` (5 tests) + 更新 `test_v2_11_scoring_calibration` 阈值
+- **未来改该区域注意事项**：
+  - 不要直接改 score_dimensions 来放大差异 · 它是 v2.11 校准过的 · 改会破坏白马评分
+  - 真正的根因是 score_dimensions 给缺数据维度默认 5-7 (中性) · 抹平了 ROE/营收差异 · 未来 v3.5+ 可考虑 "active-weighted"
+  - verdict 阈值增加时 · 同步更新 `test_v2_11_scoring_calibration::_verdict_for` ladder
+
+---
+
+## v3.4.0 (2026-05-10 · 基金/ETF 持仓循环分析 + baostock ≥0.9.1)
+
+### FEATURE · ETF/LOF 持仓循环分析（v2.10.4 early-exit 改为 opt-in 批量）
+- **背景**：v2.9.2 引入 ETF/LOF 早退（避免对非个股标的跑 51 评委）· 但用户期望"分析整只 ETF" · 之前手动跑 10 次 stock-analyze 太麻烦
+- **位置**：`lib/fund_holdings_runner.py`（新）+ `run.py`（两处分支接入 runner）
+- **用户体验**：检测到 ETF/LOF → 列持仓 + 估算耗时 → 二次确认（y / 数字 / N） → 循环跑 stock-analyze + 生成 summary HTML
+- **安全设计**：
+  - 默认取消（除非用户输入 y）
+  - 数字输入只跑前 K 只
+  - 单只崩不中断（partial failure 容忍）
+  - 非交互环境必须 `UZI_FUND_AUTO_YES=1` 显式确认
+  - 可转债 / 指数仍 early-exit · 只对 ETF/LOF 启用
+- **回归测试**：`tests/test_v3_4_0_fund_holdings.py` (7 tests · runtime 估算 / 取消 / auto_yes / partial failure / summary HTML 链接)
+- **未来改该区域注意事项**：
+  - **不要把 ETF/LOF pipeline 强行塞进主 22 维 stock pipeline** · 它们没有 ROE/护城河字段 · 这次设计意在循环复用 stock pipeline 而不是新建 fund pipeline
+  - 默认取消逻辑必须保留 · 否则 agent 误传 ETF 会循环 10 次浪费 token
+  - `UZI_FUND_AUTO_YES=1` 应用于 CI / agent 编排场景 · 不要默认开启
+  - top_holdings 必须有 rank/code/name 三个字段 · weight_pct 可选
+
+### CONFIG · baostock 锁版本 ≥0.9.1
+- **背景**：社群通知 2026-04-22 起 baostock 服务端要求 ≥0.9.1
+- **位置**：`requirements.txt`
+- **修法**：`baostock>=0.8.9` → `baostock>=0.9.1`
+- **验证**：本地 0.9.1 实测 login + 茅台 K 线 query 全过
+- **未来改该区域注意事项**：baostock 服务端版本要求未来可能继续上调 · 看到 login() 大面积失败时优先升 baostock
+
+---
+
+## v3.3.4 (2026-05-10 · mini_racer V8 crash escape hatch · issue #61)
+
+### BUG #61 · macOS Py 3.12/3.13 下 mini_racer V8 SIGTRAP（@dragonforai）
+- **症状**：`python run.py SEHK.03690 --depth deep` → `[FATAL:address_pool_manager.cc(67)] Check failed: !pool->IsInitialized()` · Python 进程被 SIGTRAP 杀掉
+- **位置**：`run_real_test.run_fetcher` (legacy 路径) + `lib/pipeline/collect.py::_run` (pipeline 路径)
+- **根因**：
+  - `mini_racer` 是 V8 isolate 的 ctypes 封装 · 非进程内 thread-safe
+  - v2.6 加 `_MINI_RACER_LOCK` 串行化 · 但 macOS Python 3.12+ 下 libffi cross-thread ctypes call 时序仍可能让 V8 isolate pool 被多次初始化
+  - SIGTRAP 是进程级 signal · Python `try/except` 抓不到 · 整个 process 被 kill
+- **影响**：HK 港股 + deep 模式特别容易触发（因为 deep 启用更多 fetcher · 增加 mini_racer 调用频次）· 用户无法生成报告
+- **修法**（多重 layer）：
+  1. **显式 escape hatch**：`UZI_DISABLE_MINI_RACER=1` env var · 跳过 3 个 fetcher graceful 降级
+  2. **自动恢复**（核心创新）：sentinel 文件机制
+     - 调 mini_racer fetcher 前写 `~/.uzi-skill/_minirackercrash.sentinel`
+     - 成功后删
+     - 进程崩则 sentinel 留下 · 下次启动自动 disable
+  3. **强制启用**：`UZI_FORCE_MINI_RACER=1` 覆盖 sentinel（debug 用）
+  4. legacy + pipeline 两条路径都做了同样保护
+- **验证**：UZI_DISABLE_MINI_RACER=1 e2e 跑通 · 614 KB HTML 仍生成
+- **回归测试**：`tests/test_v3_3_4_minirackerguard.py` (7 tests)
+- **未来改该区域注意事项**：
+  - 不要试图用 Python `try/except` 抓 V8 SIGTRAP · 抓不到（进程级 signal）
+  - sentinel 文件路径在 `~/.uzi-skill/_minirackercrash.sentinel` · 不要改路径
+  - 调 mini_racer fetcher 时 **必须先 arm sentinel** · 成功后 disarm · 否则 auto-recovery 失效
+  - 普通 Python 异常时也要 disarm sentinel · 否则误判 V8 crash 让用户每次都跑 fallback
+  - **加新的 mini_racer 触发函数时**（akshare 升级可能引入更多 V8 调用）· 务必加进 `_MINI_RACER_FETCHERS` 集合
+  - 长期方案：考虑用 subprocess 隔离 mini_racer call · 或换 cninfo HTTP API 不依赖 mini_racer
+
+---
+
+## v3.3.3 (2026-05-06 · 社区 PR · 4 项 hotfix)
+
+### BUG #52 · LHB akshare 1.18+ "近一月" 字符串失效（@qdby26）
+- **症状**：所有股票 `lhb_count_30d=0` / `matched_youzi=[]` / `inst_vs_youzi` 全 0 · 龙虎榜模块永远空
+- **位置**：`lib/data_sources.py::_fetch_lhb_impl`
+- **根因**：akshare 1.18+ 改了 API · `stock_lhb_stock_detail_em(symbol, date="近一月")` 返 `None` → `TypeError` → `except: return []` 静默吞掉
+- **修法**：用 `stock_lhb_stock_detail_date_em` 拿历史日期 + 按 days 过滤 + 逐日调 YYYYMMDD 格式 + 列名归一化 `交易营业部名称 → 营业部名称`
+- **验证**：6 mock 回归测试全过
+- **未来改该区域注意事项**：
+  - akshare 任何字符串简写参数（"近 X 月" / "今年" / "全部"）都不可信 · 优先用 YYYYMMDD/YYYY-MM-DD 数值格式
+  - `except Exception: return []` 这种静默吞异常的写法是 anti-pattern · 必须至少 print warning
+
+### BUG #54 · institutional.py 缺 svg_radar import（@DragonQuix）
+- **症状**：报告里 BCG/Porter 5 forces 块缺失（_render_competitive_analysis 静默返空）
+- **位置**：`lib/report/institutional.py:393`
+- **根因**：v3.2 拆分时只 import 了 `svg_gauge / svg_progress_row` · 漏了 `svg_radar`（v3.3.2 已修过 svg_sparkline · 但忘了 svg_radar）
+- **修法**：import 块加 `svg_radar`
+- **验证**：`test_institutional_imports_svg_radar` + `test_render_competitive_analysis_does_not_raise_nameerror`
+- **未来改该区域注意事项**：
+  - **任何 lib/report/* 子模块用的 svg_* 函数必须 import** · v3.2 拆分时漏了 svg_sparkline (修过 #50) 又漏了 svg_radar · 已加回归测试守护 · 若再加 svg_xxx 也要更新 import
+  - 推荐：CI 加 `python -c "from lib.report.institutional import *; ar.assemble('TEST.SH')"` 烟雾测试
+
+### BUG #59 · Python 3.11 嵌套 f-string 反斜杠 SyntaxError（@Charlson852）
+- **症状**：Python 3.11 import `lib.report.special_cards` 直接 `SyntaxError: f-string expression part cannot include a backslash`
+- **位置**：`lib/report/special_cards.py::render_school_scores` · 第 500 行
+- **根因**：Python 3.11 不允许 f-string 表达式部分有反斜杠 · `f"{f'...\\\"...\\\"...' if skip else ''}"` 这种嵌套 f-string + 反斜杠 attr 引号会触发 SyntaxError（Python 3.12+ 才允许）
+- **影响**：所有 Python 3.11 用户（Debian 13 默认）完全无法 import · stage2 全崩
+- **修法**：把内嵌 f-string 提取为独立变量 `skip_display` · 主 f-string 只插入变量 (无反斜杠)
+- **PR #59 原版 bug 警告**：作者修这个的同时把 `items.append(...)` 从 for-loop **内**（8 缩进）错移到 for-loop **外**（4 缩进）· 会导致 7 流派只渲染最后一个 · 我们 cherry-pick 仅修复部分 · 保持原缩进
+- **验证**：`test_school_scores_uses_skip_display_variable` + `test_render_school_scores_renders_all_seven_groups`
+- **未来改该区域注意事项**：
+  - **永远不要在 f-string 表达式部分用反斜杠**（即使 Python 3.12+ 允许 · 也会让 3.11 崩）· 把 HTML 等需要引号的部分提取为独立变量
+  - 重写 render_school_scores 时 · `items.append` **必须**在 for-loop 内 · 否则只渲染最后一个流派 · `test_render_school_scores_renders_all_seven_groups` 守护这条
+  - 缩进改动看似无害但语义巨变 · review PR 时关注控制流缩进
+
+---
+
 ## v3.3.2 (2026-04-28 · GitHub issue #50 + #51 hotfix)
 
 ### BUG #50 · institutional.py 漏 import svg_sparkline · NameError 卡死 stage2

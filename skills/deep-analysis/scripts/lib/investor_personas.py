@@ -556,6 +556,28 @@ PERSONAS: dict[str, dict[str, list[str]]] = {
         "bearish": ["多因子评分在底部 20%，全面卖出。"],
         "neutral": ["因子分散，中性。"],
     },
+
+    # ═══════════════ Group I · AI 卡位/瓶颈猎手 ═══════════════
+    # Serenity (@aleabitoreddit) — 语料源：references/serenity-voice.md
+    "serenity": {
+        "bullish": [
+            "{name} 卡在 {industry} 那个不可替代的节点上——No substrate, no device，这种东西就是一台印钞机，anon。重仓，Then go long。",
+            "我反向拆了整条 {industry} 供应链，{name} 是那个 60%+ 份额的双寡头瓶颈，市值还 grossly mispriced。市场还没 rotation 到这，我先埋。",
+            "别人盯着终端大票，我只买它们离不开的公司。{name} 就是 {industry} 的卡脖子海峡——不可替代、扩产慢、没人定价。满仓不解释。",
+            "这是 bottleneck of a bottleneck。{name} 卡死 {industry} 的命门，下游所有人都得求它供货。Then go long，PT 我敢往上画。",
+        ],
+        "bearish": [
+            "{name} 在 {industry} 里随便就能被替代，三家厂都能供——没有卡点，对我没任何意义。Pass。",
+            "盯着 {name} 的 EPS 没用，它根本不在 {industry} 的瓶颈上，只是条可被绕过的普通环节。不碰。",
+            "供给一点都不紧，{industry} 这块产能随时能放量，{name} 没有任何不可替代性。这种我从不长。",
+            "{name} 是终端的热门大票，不是卡脖子节点。挤在 consensus 里的拥挤交易，我反手观望甚至看空。",
+        ],
+        "neutral": [
+            "{name} 在 {industry} 可能是个潜在卡点，但还没硬验证。等客户 roadmap 和缺货信号，再决定要不要 go long。",
+            "{name} 的瓶颈逻辑成立一半——份额够集中，但扩产能不能跟上还没数据。等下一份财报电话会里的 backlog 和 ASP。",
+            "故事有了，定价还没错配到位。{name} 卡位待 confirm，等机构 rotation 信号——在那之前我先小仓 tracking。",
+        ],
+    },
 }
 
 

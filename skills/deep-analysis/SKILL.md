@@ -1,7 +1,7 @@
 ---
 name: deep-analysis
-description: 个股深度分析的核心工作流。当用户要求"深度分析 / 全面分析 / 帮我看看 / 值不值得买 / DCF / 机构建模 / 首次覆盖 / 投委会备忘录"等涉及个股研究的请求时触发。覆盖 A 股、港股、美股，产出 22 维数据 + 51 位大佬量化评审 + 6 种机构级估值建模 (DCF/Comps/LBO/3-Stmt/Merger) + 7 种研究产物 (首次覆盖/财报解读/催化剂日历/投资逻辑追踪/晨报/量化筛选/行业综述) + 6 种决策方法 (IC Memo/DD/Porter/单位经济/VCP/再平衡) + 杀猪盘检测，最终生成 Bloomberg 风格 HTML 报告 + 社交分享战报。关键词：股票、个股、深度分析、估值、DCF、comps、首次覆盖、IC memo、杀猪盘、龙虎榜、akshare。
-version: 3.3.1
+description: 个股深度分析的核心工作流。当用户要求"深度分析 / 全面分析 / 帮我看看 / 值不值得买 / DCF / 机构建模 / 首次覆盖 / 投委会备忘录"等涉及个股研究的请求时触发。覆盖 A 股、港股、美股，产出 22 维数据 + 52 位大佬量化评审 + 6 种机构级估值建模 (DCF/Comps/LBO/3-Stmt/Merger) + 7 种研究产物 (首次覆盖/财报解读/催化剂日历/投资逻辑追踪/晨报/量化筛选/行业综述) + 6 种决策方法 (IC Memo/DD/Porter/单位经济/VCP/再平衡) + 杀猪盘检测，最终生成 Bloomberg 风格 HTML 报告 + 社交分享战报。关键词：股票、个股、深度分析、估值、DCF、comps、首次覆盖、IC memo、杀猪盘、龙虎榜、akshare。
+version: 3.7.1
 author: FloatFu-true
 license: MIT
 metadata:
@@ -22,7 +22,7 @@ metadata:
 - **脚本给你提供 5 类产物**：
   1. **原始数据** (Task 1 · 22 维 fetcher)
   2. **机构建模结果** (Task 1.5 · DCF/Comps/LBO/3-Stmt/IC Memo/Porter 等 17 种方法的计算输出)
-  3. **51 人评委量化裁决** (Task 3 · 每人引用具体规则)
+  3. **52 人评委量化裁决** (Task 3 · 每人引用具体规则)
   4. **数据完整性报告** (哪些字段缺失 / 哪些降级)
   5. **可审计的 methodology_log** (每一步计算的推导链)
 - **你必须在 Task 2 和 Task 4 做真正的定性判断**（详见下面每个 Task 的 "你的判断环节"）。
@@ -35,7 +35,7 @@ metadata:
 4. **Task 5 报告组装禁止空泛话术**（"基本面良好" / "前景广阔" / "值得关注" — 这三个词组出现即失败）。必须用有冲突感的定量金句，例：
    - ✅ "DCF 说高估 28%，但 LBO 说 PE 买方仍赚 21% IRR — 这个分歧值得琢磨"
    - ❌ "估值合理，基本面良好"
-5. **矛盾必须呈现，不准和稀泥**：DCF 与 Comps 结论冲突时，**把冲突写进报告**；51 评委分歧大时，**强调分歧本身是信息**。
+5. **矛盾必须呈现，不准和稀泥**：DCF 与 Comps 结论冲突时，**把冲突写进报告**；52 评委分歧大时，**强调分歧本身是信息**。
 6. **Task 1 必须并行执行**（4 个子 agent / wave），串行跑 22 个 fetcher 直接扣分。
 
 ### ⛔ HARD-GATE-UPDATE-PROMPT · 新版本提示（v2.14）
@@ -84,7 +84,7 @@ metadata:
 <HARD-GATE>
 若 `stage1()` 返回 `{"status": "non_stock_security", "security_type": "etf|lof|convertible_bond", ...}`
 （或 `.cache/{ticker}/_resolve_error.json` 有 `status: non_stock_security`），
-你**绝不能**假装继续跑——51 评委规则全是个股财务指标，ETF/基金/可转债
+你**绝不能**假装继续跑——52 评委规则全是个股财务指标，ETF/基金/可转债
 根本不该走这个 pipeline。
 
 你必须：
@@ -100,7 +100,7 @@ metadata:
 
 **绝不能**：
 - 硬把 ETF 跑完 stage1（22 维大多 N/A）
-- 虚构"ETF 评委意见"（51 评委从没为 ETF 设计过规则）
+- 虚构"ETF 评委意见"（52 评委从没为 ETF 设计过规则）
 - 看到 `_resolve_error.json` 就忽略继续调 stage2
 
 Payload 示例（agent 看到这个就知道该走 ETF 引导流程）:
@@ -120,10 +120,35 @@ Payload 示例（agent 看到这个就知道该走 ETF 引导流程）:
 ```
 </HARD-GATE>
 
-### ⛔ HARD-GATE-PERSONA-ROLEPLAY · 51 评委 role-play 必须读 YAML persona（v2.15）
+### ⛔ HARD-GATE-SCHOOL-LOCK · 用户锁定单一流派视角（v3.5.0）
 
 <HARD-GATE>
-从 v2.15.0 起，`skills/deep-analysis/personas/*.yaml` 有全 51 位投资者的 persona 定义——
+当用户用 `python run.py <ticker> --school F`（或 A/B/C/D/E/F/G 之一）锁定流派视角时 ·
+环境变量 `UZI_SCHOOL` 会被设置 · synthesis.json 里 `school_lock` 字段也会标注。
+
+**进入 stage1 后的 role-play 阶段 · 你必须**：
+
+1. **读 `panel.json` 里 group == UZI_SCHOOL 的评委**（通常 5-8 人）· 只 role-play 这些人
+2. 其他派评委已被规则引擎标 `signal=skip` · reason="用户锁定 X 派视角" · 你**不要再给他们写评语 / 翻盘**
+3. `agent_analysis.json` 必须自我约束：
+   - `panel_insights` 仅讨论该派内部分歧 · 不要写"巴菲特说 X · 赵老哥说 Y"这种跨派对比
+   - `great_divide_override.bull_say_rounds / bear_say_rounds` 必须都来自该派评委
+   - 若该派 5-8 人全看多 · 多空辩论也得**派内分歧版本**（如游资里"打板派 vs 卡位派"）
+4. **报告顶部已渲染 SCHOOL LOCK banner** · 用户/分享者一眼能看出本次仅看了该派 · 避免被误读为全 52 评委结论
+
+**绝不能**：
+- ❌ 不顾 `UZI_SCHOOL` 把 52 人都 role-play 一遍（其他派 skip 状态会被你的 override 覆盖 · 误导用户）
+- ❌ 在 `panel_insights` 里写"价值派看空但游资看多"这种跨派叙事（用户已选了一派 · 不需要外部对比）
+
+何时 skip 本 HARD-GATE：
+- `UZI_SCHOOL` 未设置（默认 · 全 52 评委正常 role-play）
+- `synthesis.json["school_lock"] is None`
+</HARD-GATE>
+
+### ⛔ HARD-GATE-PERSONA-ROLEPLAY · 52 评委 role-play 必须读 YAML persona（v2.15）
+
+<HARD-GATE>
+从 v2.15.0 起，`skills/deep-analysis/personas/*.yaml` 有全 52 位投资者的 persona 定义——
 **12 个 flagship** 手写（巴菲特 / 芒格 / 格雷厄姆 / 费雪 / 林奇 / 木头姐 / 索罗斯 / 达里奥 /
 段永平 / 张坤 / 赵老哥 / 章盟主）· **39 个 stub** 自动生成（auto_generated_stub · 仅作基础
 身份提示，主要还是靠 Rules 引擎）。
@@ -145,7 +170,7 @@ Payload 示例（agent 看到这个就知道该走 ETF 引导流程）:
    - 可以按 group 风格模板补充简短 voice，但不得编造具体历史言论
 4. **prefix-stable system message**（如果走 `lib.personas.build_system_message`）：
    - 同一 SNAPSHOT JSON 只拼一次
-   - 51 persona 调用时 system message 字节级一致（prompt cache 命中）
+   - 52 persona 调用时 system message 字节级一致（prompt cache 命中）
 
 **绝不能**：
 - ❌ 给某个投资者写他历史上不可能持的立场（林奇对 EPS 0 的股票说 PEG 可算 · 木头姐对
@@ -265,7 +290,7 @@ v2.13.5 改动：
 
 stage2 自动识别股票 style（白马 / 高成长 / 周期 / 小盘投机 / 分红防御 /
 困境反转 / 量化因子 / 中性兜底），按 style 调整：
-- 51 评委组级权重（A-G × style 矩阵）+ 8 个个体 override
+- 52 评委组级权重（A-G × style 矩阵）+ 8 个个体 override
 - 22 维 fundamental dim multiplier
 - neutral 半权计入 consensus（修正旧公式 0% 权重的问题）
 报告 hero 区会显示 style chip + 加权前后分数对比。
@@ -416,7 +441,7 @@ stage2 会把这些字段标为"已确认拿不到"，HTML 报告显示划线 ch
 [███░░░░░░░░░░░░░░░░░] 17% · Task 1/6 · 数据采集 ✓
 [██████░░░░░░░░░░░░░░] 33% · Task 1.5 · 机构建模 ✓
 [██████████░░░░░░░░░░] 50% · Task 2/6 · 维度打分 ✓
-[█████████████░░░░░░░] 67% · Task 3/6 · 51 评委 ✓
+[█████████████░░░░░░░] 67% · Task 3/6 · 52 评委 ✓
 [████████████████░░░░] 83% · Task 4/6 · 综合研判 ✓
 [████████████████████] 100% · Task 5/6 · 报告组装 ✓
 ```
@@ -428,7 +453,7 @@ stage2 会把这些字段标为"已确认拿不到"，HTML 报告显示划线 ch
 | 1 | 22 维数据采集 | `.cache/{ticker}/raw_data.json` | 🤖 脚本 |
 | 1.5 | 机构级建模 (DCF/Comps/LBO/3-Stmt/IC/Porter/…) | 内联在 raw_data.json 的 `dim 20/21/22` | 🤖 脚本 + **🧠 你的假设审查** |
 | 2 | 22 维打分 + **定性判断** | `.cache/{ticker}/dimensions.json` | 🤖 脚本 + **🧠 你写定性评语** |
-| 3 | 51 评委量化裁决 | `.cache/{ticker}/panel.json` | 🤖 规则引擎 |
+| 3 | 52 评委量化裁决 | `.cache/{ticker}/panel.json` | 🤖 规则引擎 |
 | 4 | 综合研判 + **叙事合成** | `.cache/{ticker}/synthesis.json` | **🧠 你主导** |
 | 5 | 报告组装 | `reports/{ticker}_{YYYYMMDD}/full-report.html` + share-card + war-report | 🤖 脚本 + **🧠 你的金句** |
 
@@ -452,7 +477,7 @@ Stage 1 自动完成：Task 1（22 维采集）→ Task 1.5（机构建模）→
 
 <HARD-GATE>
 Do NOT run stage2() until ALL of the following are complete:
-1. You have READ .cache/{ticker}/panel.json and reviewed the 51 skeleton scores
+1. You have READ .cache/{ticker}/panel.json and reviewed the 52 skeleton scores
 2. You have SPAWNED sub-agents (or personally analyzed) each investor group
 3. You have MERGED agent results back into panel.json with updated headline/reasoning/score
 4. You have WRITTEN agent_analysis.json with dim_commentary (≥5 dimensions) + panel_insights
@@ -463,10 +488,24 @@ genuine investment analysis. The whole point of this plugin is agent-driven judg
 </HARD-GATE>
 
 核心是：
-1. 读 `.cache/{ticker}/panel.json` 中 51 人的骨架分
+1. 读 `.cache/{ticker}/panel.json` 中 52 人的骨架分
 2. **Spawn 4 个并行 sub-agent 分组 role-play 投资者**——让他们真正"扮演"巴菲特/赵老哥思考
 3. 用 agent 的判断覆盖 panel.json 中的 headline/reasoning/score
 4. **写 `agent_analysis.json`** 到 `.cache/{ticker}/` — 这是闭环的关键！
+
+**agent_analysis.json 必填字段（缺字段 stage2 会 schema warning/error）：**
+
+| 字段 | 要求 | 触发校验 |
+|---|---|---|
+| `agent_reviewed` | 必须 `true` | ⚠️ 缺 → warning |
+| `dim_commentary` | 至少 5 个维度，**每条 ≥20 字**（引用具体数字，禁止空泛） | 🔴 <20 字 → warning |
+| `panel_insights` | **≥30 字**，评委投票分布 + 多空分歧分析 | ⚠️ <30 字 → warning |
+| `great_divide_override` | punchline(≥10 字) + bull_say_rounds(≥3 条) + bear_say_rounds(≥3 条) | 🔴 缺字段 → error |
+| `narrative_override.core_conclusion` | **≥20 字**综合定论 | ⚠️ <20 字 → warning |
+| `narrative_override.risks` | **≥3 条**风险 | ⚠️ <3 条 → warning |
+| `narrative_override.buy_zones` | **必须含 value/growth/technical/youzi 四个 key**，每个 key 内含 `price`(数值) + `rationale`(≥5 字解释) | 🔴 缺 key → error / ⚠️ 缺子字段 → warning |
+| `qualitative_deep_dive` | 覆盖 3_macro/7_industry/8_materials/9_futures/13_policy/15_events 共 6 维。每维含：`evidence` 数组（≥2 条 `{source, url, finding, retrieved_at}`）、`associations` 跨域因果链（**6 维合计 ≥3 条** `{link_to, chain_id, causal_chain, estimated_impact}`）、`conclusion`（1-2 句）。详见 `references/task2.5-qualitative-deep-dive.md` 第 5 节 | 🔴 evidence 非 list → error / ⚠️ associations<3 → warning |
+| `data_gap_acknowledged` | v2.3+ 推荐。dict 格式 `{"dim_key": "已尝试 X 但失败的原因"}`。标记数据采集失败但 agent 已知晓的维度，HTML 报告显示 ⚠️ 橙色徽章而非空白 | 🔴 类型非 dict → error |
 
 #### agent_analysis.json 格式
 
@@ -478,7 +517,7 @@ genuine investment analysis. The whole point of this plugin is agent-driven judg
     "1_financials": "ROE 不到 8%，连续 3 年下滑。现金流波动大，应收账款占营收比偏高，回款风险明显。",
     "2_kline": "均线空头排列，MACD 死叉，量能萎缩。典型下跌趋势，不满足 Stage 2 条件。"
   },
-  "panel_insights": "51 评委中，价值派集体看空（ROE 太低+无护城河），游资中性（有地方城投概念但板块热度不够），只有少数逆向投资者给出中性偏多。整体共识 32%，偏弱。",
+  "panel_insights": "52 评委中，价值派集体看空（ROE 太低+无护城河），游资中性（有地方城投概念但板块热度不够），只有少数逆向投资者给出中性偏多。整体共识 32%，偏弱。",
   "great_divide_override": {
     "punchline": "DCF 说高估 23%，但城投重组预期让 LBO 视角的 IRR 仍有 18% — 这个冲突值得关注。",
     "bull_say_rounds": [
@@ -493,7 +532,7 @@ genuine investment analysis. The whole point of this plugin is agent-driven judg
     ]
   },
   "narrative_override": {
-    "core_conclusion": "宁波建工 · 48 分 · 谨慎。典型地方基建股，ROE 不到 8%、毛利率 8%，靠城投整合讲故事。51 位大佬 12 人看多，29 人看空。DCF 高估 23%，但 LBO 压力测试 IRR 18% — 博弈价值存在但风险更大。",
+    "core_conclusion": "宁波建工 · 48 分 · 谨慎。典型地方基建股，ROE 不到 8%、毛利率 8%，靠城投整合讲故事。52 位大佬 12 人看多，29 人看空。DCF 高估 23%，但 LBO 压力测试 IRR 18% — 博弈价值存在但风险更大。",
     "risks": [
       "ROE 持续下滑，连续 3 年低于 8%",
       "应收账款占比过高，回款周期拉长",
@@ -553,7 +592,7 @@ python run.py <股票> --no-browser
 3. Wave 3 特殊维度（fund_managers, similar_stocks）
 4. **Task 1.5 自动跑**：compute_dim_20/21/22 (DCF/Comps/LBO/3-Stmt/IC Memo/Porter/…)
 5. 数据完整性校验（`lib/data_integrity.py`）
-6. 51 评委量化引擎自动执行
+6. 52 评委量化引擎自动执行
 
 脚本跑完后你读 `.cache/{ticker}/raw_data.json`，向用户汇报：
 - 数据快照时间 + 市场状态
@@ -707,7 +746,7 @@ Agent prompt:
 
 ---
 
-### Task 3 · 51 评委审判 (**🧠 Agent 主导 · 规则引擎仅为参考**)
+### Task 3 · 52 评委审判 (**🧠 Agent 主导 · 规则引擎仅为参考**)
 
 > **核心原则**：每个投资者的判断不是"跑公式"，而是 Claude 真正站在这个人的角度思考。规则引擎给出量化参考分，最终判断由你做。
 >
@@ -881,7 +920,7 @@ python scripts/render_war_report.py {ticker}  # 战报 PNG
 生成的 HTML 报告打开必须满足：
 - 无 console error
 - 22 维深度卡全部出现（包含新增的 dim 20/21/22）
-- 51 评委聊天室 + 审判席都渲染
+- 52 评委聊天室 + 审判席都渲染
 - Great Divide punchline 不为空
 - 杀猪盘等级显示
 - 文件大小 > 400 KB（低于说明有大段缺失）
@@ -947,7 +986,7 @@ echo "${CODEX:-${OPENAI_API_KEY:+codex_via_openai}}"
 |---|---|
 | 默认 | 完整 6 Task |
 | `/quick-scan` | 只跑 dim 0/1/2/10/18 + Top 10 投资者，跳过 dim 21/22 |
-| `/panel-only` | 跳过 Task 2, 只输出 51 评委 + synthesis |
+| `/panel-only` | 跳过 Task 2, 只输出 52 评委 + synthesis |
 | `/scan-trap` | 只跑 dim 18 (杀猪盘)，不调评审团 |
 | `/dcf` | 只跑 DCF 估值单独输出 |
 | `/comps` | 只跑同行对标 |
@@ -1005,9 +1044,9 @@ echo "${CODEX:-${OPENAI_API_KEY:+codex_via_openai}}"
 
 ### 量化评委 / 规则引擎
 - `lib.stock_features.extract_features(raw, dims)` — 108 标准化特征
-- `lib.investor_criteria.INVESTOR_RULES` — 51 人 180 条规则
+- `lib.investor_criteria.INVESTOR_RULES` — 52 人 180 条规则
 - `lib.investor_evaluator.evaluate(investor_id, features)` — 单人裁决
-- `lib.investor_evaluator.evaluate_all(features)` — 51 人批量
+- `lib.investor_evaluator.evaluate_all(features)` — 52 人批量
 - `lib.investor_evaluator.panel_summary(results)` — panel 汇总
 
 ### 数据质量
@@ -1018,7 +1057,7 @@ echo "${CODEX:-${OPENAI_API_KEY:+codex_via_openai}}"
 - `references/task1-data-collection.md` — 22 维 fetcher 清单 + 并行策略
 - `references/task1.5-institutional-modeling.md` — **DCF/Comps/LBO 默认参数与 A 股适配**（重要！）
 - `references/task2-dimension-scoring.md` — 打分规则
-- `references/task3-investor-panel.md` — 51 评委规则
+- `references/task3-investor-panel.md` — 52 评委规则
 - `references/task4-synthesis.md` — 叙事合成规范
 - `references/task5-report-assembly.md` — 报告组装
 - `references/fin-methods/README.md` — 17 种机构方法论索引

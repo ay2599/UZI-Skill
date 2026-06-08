@@ -155,6 +155,13 @@ PROFILES: dict[str, dict[str, str]] = {
         "position_sizing": "等权数千只，单票仓位 < 0.5%；风险预算由协方差决定",
         "what_would_change_my_mind": "模型信号 Sharpe 跌破 0.5 · 因子衰减 · 市场结构变化（如交易制度改变）",
     },
+
+    # ────── Group H · AI 卡位/瓶颈猎手 ──────
+    "serenity": {
+        "time_horizon": "thesis-driven，从信息差到机构 rotation 兑现，典型数月到 1-2 年；瓶颈逻辑不破就拿住",
+        "position_sizing": "极度集中 + 约 1.3-1.4x margin，最高信念的卡点敢满仓重押；不在链上的一律 0 仓",
+        "what_would_change_my_mind": "卡位被证伪（出现可替代方案 / 新增产能放量）· 供给从紧转松 · 下游 roadmap 绕过该节点 · 估值已反映瓶颈、信息差消失",
+    },
 }
 
 

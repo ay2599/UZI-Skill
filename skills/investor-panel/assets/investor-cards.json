@@ -1,8 +1,8 @@
 {
   "_meta": {
     "version": "0.1.0",
-    "count": 50,
-    "groups": ["A 经典价值", "B 成长投资", "C 宏观对冲", "D 技术趋势", "E 中国价投", "F 游资", "G 量化"],
+    "count": 51,
+    "groups": ["A 经典价值", "B 成长投资", "C 宏观对冲", "D 技术趋势", "E 中国价投", "F 游资", "G 量化", "H 科技领袖派", "I AI 卡位/瓶颈猎手"],
     "_note": "源 of truth 是 scripts/lib/investor_db.py。本文件用于 HTML 报告渲染，由 build_cards.py 自动同步。"
   },
   "investors": [
@@ -61,6 +61,8 @@
 
     {"id":"simons","name":"西蒙斯","en":"Jim Simons","group":"G","tagline":"统计套利","avatar_seed":"Simons-Beard","reference":"references/group-g-quant.md#48"},
     {"id":"thorp","name":"索普","en":"Ed Thorp","group":"G","tagline":"凯利公式","avatar_seed":"Thorp-Cards","reference":"references/group-g-quant.md#49"},
-    {"id":"shaw","name":"大卫·肖","en":"David Shaw","group":"G","tagline":"多因子","avatar_seed":"Shaw-Code","reference":"references/group-g-quant.md#50"}
+    {"id":"shaw","name":"大卫·肖","en":"David Shaw","group":"G","tagline":"多因子","avatar_seed":"Shaw-Code","reference":"references/group-g-quant.md#50"},
+
+    {"id":"serenity","name":"Serenity","en":"Serenity (@aleabitoreddit)","group":"I","tier":"flagship","flagship":true,"tagline":"AI 卡脖子猎手","avatar_seed":"Serenity-Chip","reference":"references/group-i-serenity.md#1"}
   ]
 }

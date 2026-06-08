@@ -31,6 +31,7 @@ from lib.report.svg_primitives import (
     svg_gauge, svg_progress_row,
     svg_radar,
     svg_sparkline,  # v3.3.2 · issue #50 修复 · institutional 块用了但 v3.2 拆分时漏 import
+    svg_radar,      # v3.3.3 · PR #54/#59 · _render_competitive_analysis Porter radar 用 · v3.2 拆分时漏 import
 )
 from lib.report.dim_viz import _score_class
 
@@ -455,12 +456,15 @@ def _render_style_chip(syn: dict) -> str:
 </div>'''
 
 
-def _render_data_gap_banner(data_gaps: dict | None) -> str:
+def _render_data_gap_banner(data_gaps: dict | None, raw: dict | None = None, syn: dict | None = None) -> str:
     """v2.3 · Render orange banner listing data gaps. Returns empty string if no gaps.
 
-    Reads synthesis.data_gaps which is populated in stage2() from _data_gaps.json
-    (produced by data_integrity.generate_recovery_tasks). The banner tells readers
-    upfront that the report has known holes — no silent fake numbers.
+    v3.4.4 · 新增 raw 参数 · 检测 ETF/LOF/mutual_fund 等基金类型 · 调整文案
+    避免用户把"基金类型预期缺字段"误判为"数据不可信"。
+
+    v3.4.5 · 新增 syn 参数 · 普通 stock 若 fund_score 偏低 + 覆盖率 <60% ·
+    渲染 low-confidence banner · 警告"评分受数据缺失影响 · 应以 agent 定性评估为准".
+    解决京东方实测 fund_score=37.6 但 agent 重评 65/100 的脱节问题.
     """
     if not isinstance(data_gaps, dict) or not data_gaps.get("tasks"):
         return ""
@@ -470,6 +474,38 @@ def _render_data_gap_banner(data_gaps: dict | None) -> str:
     unresolved = data_gaps.get("unresolved", total)
     ack = total - unresolved
     cov = data_gaps.get("coverage_pct", 0)
+
+    # v3.4.5 · 低可信度检测：stock 类型 + fund_score < 50 + cov < 60%
+    # 满足 → 渲染 low-confidence banner（红色调）· 警告分数不可信
+    is_low_confidence = False
+    fund_score_for_msg = 0
+    if syn and isinstance(syn, dict):
+        fund_score_for_msg = float(syn.get("fundamental_score", 60))
+        if fund_score_for_msg < 50 and cov < 60:
+            is_low_confidence = True
+
+    # v3.4.4 · 检测是否基金类型（ETF/LOF/mutual_fund · 不应跑 stock 22 维全套）
+    is_fund_like = False
+    fund_label = None
+    if raw:
+        basic = (raw.get("dimensions", {}) or {}).get("0_basic", {}).get("data") or {}
+        sec_type = basic.get("security_type") or raw.get("security_type")
+        ticker = raw.get("ticker", "")
+        if sec_type in ("etf", "lof", "mutual_fund"):
+            is_fund_like = True
+            fund_label = {"etf": "ETF", "lof": "LOF 基金", "mutual_fund": "开放式基金"}.get(sec_type, "基金")
+        elif ticker:
+            # security_type 没在 raw 里 · 用 ticker 反推
+            try:
+                from lib.market_router import classify_security_type, parse_ticker
+                ti = parse_ticker(ticker)
+                if ti.market == "A":
+                    st = classify_security_type(ti.code)
+                    if st in ("etf", "lof", "mutual_fund"):
+                        is_fund_like = True
+                        fund_label = {"etf": "ETF", "lof": "LOF 基金", "mutual_fund": "开放式基金"}.get(st, "基金")
+            except Exception:
+                pass
 
     # Build chip list — critical first, then optional, then enrichment
     order = {"critical": 0, "optional": 1, "enrichment": 2}
@@ -485,23 +521,54 @@ def _render_data_gap_banner(data_gaps: dict | None) -> str:
     if len(sorted_tasks) > 20:
         overflow = f'<span class="chip">+{len(sorted_tasks) - 20} 更多</span>'
 
-    subtitle = (
-        f"数据覆盖率 <strong>{cov}%</strong> · "
-        f"共 <strong>{total}</strong> 个字段未从脚本采集到"
-    )
-    if ack:
-        subtitle += f"（其中 <strong>{ack}</strong> 已由 agent 确认"
-        subtitle += "真的拿不到）"
+    if is_fund_like:
+        # v3.4.4 · 基金类型 · 缺字段是预期不是 bug · 改文案避免误判可信度
+        banner_class = "data-gap-banner fund-type"
+        title = f"⚠️ FUND-TYPE NOTE · {fund_label} 缺个股财务字段属预期"
+        subtitle = (
+            f"<strong>{fund_label}</strong>本身没有 ROE / 营收 / 净利率 / PE / 公司名 等个股财务字段 · "
+            f"所以数据覆盖率 <strong>{cov}%</strong> 是<strong>预期偏低</strong>·不影响分析可信度. "
+            f"如果你想看具体业绩 · v3.4.0+ 起会自动询问是否循环分析<strong>前 10 大持仓股</strong>"
+            f"（如 ETF 沪深 300 → 茅台 / 宁德等成分股）·每只持仓股都有完整 22 维报告."
+        )
+        hint = (
+            "📌 这不是数据采集失败 · 是基金类型本身的字段差异. "
+            "对基金的核心评估应看持仓集中度 / 跟踪误差 / 历史回撤 (UZI 暂不直接评 · 走持仓循环代替)."
+        )
+    elif is_low_confidence:
+        # v3.4.5 · 数据缺多 + fund_score 偏低 · 评分不可信 · 警告用户
+        banner_class = "data-gap-banner low-confidence"
+        title = "🚨 LOW CONFIDENCE · 规则引擎评分可能失真"
+        subtitle = (
+            f"<strong>规则引擎给出 fundamental_score = {fund_score_for_msg:.1f}</strong> · "
+            f"但数据覆盖率仅 <strong>{cov}%</strong> · <strong>{total}</strong> 个核心字段缺失 · "
+            f"当多个维度数据空缺时 · 规则引擎默认给中性 5-6 分 · "
+            f"会人为<strong>拉低 fund_score</strong> · 不一定真实反映基本面."
+        )
+        hint = (
+            "📌 强烈建议：以 <strong>agent 重评估</strong>（基于全 22 维 + DCF + 同行 + 流派分歧）为准 · "
+            "而不是看 fund_score / 评委 0 看多 / 24 看空 这种规则引擎结论. "
+            "下方流派 consensus 也受数据缺失影响 · 仅作参考."
+        )
+    else:
+        banner_class = "data-gap-banner"
+        title = "DATA QUALITY · 本报告存在已知数据缺口"
+        subtitle = (
+            f"数据覆盖率 <strong>{cov}%</strong> · "
+            f"共 <strong>{total}</strong> 个字段未从脚本采集到"
+        )
+        if ack:
+            subtitle += f"（其中 <strong>{ack}</strong> 已由 agent 确认"
+            subtitle += "真的拿不到）"
+        hint = (
+            "Agent 已尝试浏览器抓取 / MX API / WebSearch / 逻辑推导；"
+            "划线字段为已确认无法补齐，其余字段显示为 “—”。"
+        )
 
-    hint = (
-        "Agent 已尝试浏览器抓取 / MX API / WebSearch / 逻辑推导；"
-        "划线字段为已确认无法补齐，其余字段显示为 “—”。"
-    )
-
-    return f'''<div class="data-gap-banner" role="alert">
+    return f'''<div class="{banner_class}" role="alert">
   <div class="icon">⚠️</div>
   <div class="body">
-    <div class="title">DATA QUALITY · 本报告存在已知数据缺口</div>
+    <div class="title">{title}</div>
     <div class="subtitle">{subtitle}</div>
     <div class="list">
       {chips_block}
@@ -510,6 +577,54 @@ def _render_data_gap_banner(data_gaps: dict | None) -> str:
     <div class="hint">{hint}</div>
   </div>
 </div>'''
+
+
+def _render_school_lock_banner(syn: dict | None) -> str:
+    """v3.5.0 · 用户用 --school 锁定单一流派视角时 · 报告顶部渲染 banner.
+
+    数据源 · syn["school_lock"] = {"group": "F", "label": "A 股游资"}
+    返 "" 表示无锁定 · 不渲染.
+    """
+    if not isinstance(syn, dict):
+        return ""
+    lock = syn.get("school_lock")
+    if not isinstance(lock, dict) or not lock.get("group"):
+        return ""
+    group = lock["group"]
+    label = lock.get("label") or group
+
+    # 不同流派配色 · 让 banner 立刻识别（与 school_scores 区域呼应）
+    # v3.7.0 · 代表评委更新为真实在册成员 (B/C/E/G/H 加入新晋科技大佬)
+    THEMES = {
+        "A": ("#065f46", "rgba(16,185,129,0.10)", "🛡️", "巴菲特 / 格雷厄姆 / 费雪 / 芒格 / 邓普顿 / 卡拉曼"),
+        "B": ("#1e40af", "rgba(59,130,246,0.10)", "🚀", "彼得·林奇 / 木头姐 / Andreessen (a16z) / Gurley / Naval / Gerstner / Chamath"),
+        "C": ("#7c2d12", "rgba(217,119,6,0.10)", "🌍", "索罗斯 / 达里奥 / Druckenmiller / Burry / Chanos"),
+        "D": ("#9d174d", "rgba(236,72,153,0.10)", "📈", "利弗莫尔 / 米内尔维尼 / 达瓦斯 / 江恩"),
+        "E": ("#7c3aed", "rgba(139,92,246,0.10)", "🇨🇳", "段永平 / 张坤 / 冯柳 / 邓晓峰 / 张磊 (高瓴)"),
+        "F": ("#dc2626", "rgba(239,68,68,0.10)", "⚡", "赵老哥 / 孙哥 / 章盟主 / 葛卫东 / 炒股养家"),
+        "G": ("#0891b2", "rgba(8,145,178,0.10)", "🤖", "Renaissance (Simons) / Ed Thorp / DE Shaw / AQR (Asness)"),
+        "H": ("#b45309", "rgba(217,119,6,0.10)", "👑", "黄仁勋 / 马斯克 / Sam Altman / Saylor · 科技领袖派"),
+        "I": ("#4338ca", "rgba(99,102,241,0.10)", "🔗", "Serenity · AI 供应链卡脖子/瓶颈猎手"),
+    }
+    fg, bg, icon, members_hint = THEMES.get(group, ("#374151", "rgba(107,114,128,0.10)", "🎯", ""))
+
+    return (
+        f'<div class="school-lock-banner" style="margin:16px 0;padding:14px 20px;'
+        f'background:{bg};border-left:5px solid {fg};border-radius:8px;'
+        f'display:flex;align-items:center;gap:14px;font-size:13px;line-height:1.5">'
+        f'  <div style="font-size:22px">{icon}</div>'
+        f'  <div style="flex:1">'
+        f'    <div style="font-size:11px;letter-spacing:2px;color:{fg};font-weight:700;margin-bottom:3px">'
+        f'      SCHOOL LOCK · 已锁定单一流派视角'
+        f'    </div>'
+        f'    <div style="color:#1f2937">'
+        f'      本次分析仅由 <strong style="color:{fg}">{group} · {label}</strong> 的评委参与评分 · '
+        f'其他流派的评委已 skip · 报告里"评委打分板 / 流派分数 / 多空辩论"均限于该派内.'
+        f'    </div>'
+        f'    {f"<div style=\"margin-top:4px;color:#6b7280;font-size:11px\">代表评委 · {members_hint}</div>" if members_hint else ""}'
+        f'  </div>'
+        f'</div>'
+    )
 
 
 def _render_institutional_section(raw: dict) -> str:

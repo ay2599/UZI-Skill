@@ -96,7 +96,7 @@ def prepare_target(ticker: str, *, detect_lite_fn=None) -> dict[str, Any]:
                                + ", ".join(f"{c['name']}({c['code']})" for c in r["candidates"][:3]),
                 }
                 (safe_dir / "_resolve_error.json").write_text(
-                    json.dumps(err_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+                    json.dumps(err_payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
                 )
                 print(f"\n🔴 无法确认股票: {ticker!r}")
                 print(f"   你是不是想输入：")
@@ -141,6 +141,9 @@ def _check_non_stock_security(ti) -> dict | None:
         "etf": ("ETF", "51 评委跑 ROE / 护城河 / 管理层 / 分红 这些个股财务指标，ETF 没这些字段",
                 "建议：分析该 ETF 前 3-5 大持仓股（用 akshare.fund_portfolio_hold_em 查持仓），对每只成分股单独跑 /analyze-stock"),
         "lof": ("LOF 基金", "基金没有企业基本面字段", "基金评估用专门的 fund-analyze 工具"),
+        # v3.4.3 · 开放式基金（OEIC）· 跟 ETF 一样循环分析持仓
+        "mutual_fund": ("开放式基金", "基金没有企业基本面字段（个股评委不适用）",
+                        "已自动改为分析该基金的前 10 大重仓股（akshare.fund_portfolio_hold_em）"),
         "convertible_bond": ("可转债", "可转债看转股价/溢价率/到期收益率，不是 ROE", "分析正股或用集思录的可转债工具"),
     }
     if sec_type not in NON_STOCK_GUIDANCE:
@@ -151,8 +154,9 @@ def _check_non_stock_security(ti) -> dict | None:
     safe_dir.mkdir(parents=True, exist_ok=True)
 
     # v2.9.2 · ETF 特殊处理：拉前 10 大持仓供用户选择
+    # v3.4.3 · LOF / mutual_fund 也走同样的持仓拉取（akshare.fund_portfolio_hold_em 对三类基金都 work）
     top_holdings: list[dict] = []
-    if sec_type == "etf":
+    if sec_type in ("etf", "lof", "mutual_fund"):
         try:
             import akshare as ak
             df = ak.fund_portfolio_hold_em(symbol=ti.code)
@@ -205,7 +209,7 @@ def _check_non_stock_security(ti) -> dict | None:
         ),
     }
     (safe_dir / "_resolve_error.json").write_text(
-        json.dumps(err_payload, ensure_ascii=False, indent=2), encoding="utf-8"
+        json.dumps(err_payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8"
     )
     print(f"\n🔴 非个股标的: {ti.full} ({label})")
     print(f"   本插件是**个股**深度分析引擎，{why}")

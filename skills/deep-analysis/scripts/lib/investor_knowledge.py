@@ -83,6 +83,9 @@ MARKET_SCOPE: dict[str, str] = {
     "simons": "all",
     "thorp": "US",
     "shaw": "all",
+
+    # Group H · AI 卡位/瓶颈猎手 — 主战场美股，但 AI 供应链卡点逻辑全球通用
+    "serenity": "all",
 }
 
 

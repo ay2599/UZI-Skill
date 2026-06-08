@@ -140,7 +140,7 @@ def test_school_scores_in_cached_panel():
         # 至少含一组 · 每组字段齐全
         assert isinstance(ss, dict)
         for g, s in ss.items():
-            assert g in ("A", "B", "C", "D", "E", "F", "G")
+            assert g in ("A", "B", "C", "D", "E", "F", "G", "H", "I")
             for key in ("label", "consensus", "avg_score", "verdict",
                         "n_members", "n_active", "bullish", "neutral", "bearish"):
                 assert key in s, f"school {g} missing {key}"

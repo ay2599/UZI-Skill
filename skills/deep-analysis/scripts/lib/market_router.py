@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 Market = Literal["A", "H", "U"]
-SecurityType = Literal["stock", "etf", "lof", "convertible_bond", "unknown"]
+SecurityType = Literal["stock", "etf", "lof", "convertible_bond", "mutual_fund", "unknown"]
 
 
 @dataclass
@@ -90,27 +90,48 @@ def _a_share_suffix(code6: str) -> str:
 
 
 def classify_security_type(code6: str) -> SecurityType:
-    """v2.9.2 新增：识别标的类型（stock / etf / lof / convertible_bond）.
+    """v2.9.2 新增：识别标的类型（stock / etf / lof / convertible_bond / mutual_fund）.
 
-    用于 fetch_basic 早期拒绝非个股标的（插件设计为个股分析，ETF/可转债
-    没有 ROE / 护城河 / 管理层等字段，不适合跑 51 评委流程）。
+    v3.4.3 · 修复开放式基金误判：
+    - 110011 易方达优质（开放式基金）以前被判为 convertible_bond → early-exit 用户无法分析
+    - 现在通过 akshare.fund_name_em 二次校验 · 基金代码优先识别为 mutual_fund
+    - mutual_fund 走 fund_holdings_runner 跟 ETF/LOF 一样循环分析持仓
+
+    用于 fetch_basic 早期分流：
+    - stock → 走 22 维 + 51 评委
+    - etf / lof / mutual_fund → 走 fund_holdings_runner (循环持仓)
+    - convertible_bond → early-exit（不适合）
     """
     if not code6 or not code6.isdigit() or len(code6) != 6:
         return "unknown"
-    # ETF
+    # ETF (SH 50/51/52/56/58, SZ 159)
     if code6.startswith(_SZ_FUND_PREFIXES_3) or \
        code6.startswith(_SH_FUND_PREFIXES_2):
-        # SH 50/51/52/56/58 中，501/502/506 部分是 LOF，其他是 ETF
         if code6.startswith(("501", "502", "506")):
             return "lof"
         return "etf"
     # SZ LOF (160xxx-168xxx)
     if code6.startswith(_SZ_LOF_PREFIXES_2):
         return "lof"
-    # 可转债
+
+    # v3.4.3 · 在判 convertible_bond 之前先查是否为开放式基金
+    # 110xxx / 12xxx 等码段同时是老转债 + 开放式基金 · 用 fund_name_em 二次确认
     if code6.startswith(_SH_BOND_PREFIXES_2) or \
        code6.startswith(_SZ_BOND_PREFIXES_2):
+        if _is_mutual_fund_code(code6):
+            return "mutual_fund"
         return "convertible_bond"
+
+    # v3.4.3 · 其他不符合 stock 前缀的码段 · 也查一下是否开放式基金
+    # 005827 易方达蓝筹精选 · 005xxx 不是股票前缀但是基金
+    if not (code6.startswith(_SH_STOCK_PREFIXES_3) or
+            code6.startswith(_SH_B_SHARE) or
+            code6.startswith(("60",)) or
+            code6.startswith(_SZ_STOCK_PREFIXES_3) or
+            code6.startswith(_BJ_PREFIXES_2)):
+        if _is_mutual_fund_code(code6):
+            return "mutual_fund"
+
     # 股票
     if code6.startswith(_SH_STOCK_PREFIXES_3) or \
        code6.startswith(_SH_B_SHARE) or \
@@ -119,6 +140,33 @@ def classify_security_type(code6: str) -> SecurityType:
        code6.startswith(_BJ_PREFIXES_2):
         return "stock"
     return "unknown"
+
+
+_MUTUAL_FUND_CODE_CACHE: set[str] | None = None
+
+
+def _is_mutual_fund_code(code6: str) -> bool:
+    """v3.4.3 · 用 akshare.fund_name_em 校验 6 位码是否开放式基金.
+
+    懒加载 + 缓存：第一次调时下载全市场基金清单（~5000 条）· 后续 O(1) 查表.
+    任何 akshare 异常都返 False · 不影响主流程.
+    """
+    global _MUTUAL_FUND_CODE_CACHE
+    if _MUTUAL_FUND_CODE_CACHE is None:
+        try:
+            import akshare as ak  # type: ignore
+            df = ak.fund_name_em()
+            if df is None or df.empty:
+                _MUTUAL_FUND_CODE_CACHE = set()
+            else:
+                # akshare fund_name_em 列：基金代码 / 基金简称 / 基金类型
+                code_col = next((c for c in df.columns if "代码" in str(c)), df.columns[0])
+                _MUTUAL_FUND_CODE_CACHE = {
+                    str(x).zfill(6) for x in df[code_col].dropna().tolist()
+                }
+        except Exception:
+            _MUTUAL_FUND_CODE_CACHE = set()
+    return code6 in _MUTUAL_FUND_CODE_CACHE
 
 
 def parse_ticker(raw: str) -> TickerInfo:
