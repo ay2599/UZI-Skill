@@ -139,6 +139,50 @@ def test_school_lock_I_only_serenity():
         os.environ.pop("UZI_SCHOOL", None)
 
 
+def test_school_lock_I_single_panelist_debate_not_same_person():
+    """--school I 仅 Serenity 参与时 · generate_synthesis 不能 bull==bear."""
+    from lib.pipeline.score_fns import generate_synthesis
+
+    panel = {
+        "panel_consensus": 81,
+        "signal_distribution": {"bullish": 1, "bearish": 0, "neutral": 0, "skip": 64},
+        "investors": [
+            {
+                "investor_id": "serenity",
+                "name": "Serenity",
+                "group": "I",
+                "signal": "bullish",
+                "score": 81,
+                "headline": "光模块卡位",
+                "fail": [{"msg": "估值偏高"}],
+            },
+            *[
+                {"investor_id": f"skip_{i}", "name": f"Skip{i}", "signal": "skip", "score": 0}
+                for i in range(64)
+            ],
+        ],
+    }
+    raw = {
+        "ticker": "300394.SZ",
+        "dimensions": {
+            "0_basic": {"data": {"name": "天孚通信", "price": 410}},
+            "20_valuation_models": {
+                "data": {"summary": {"dcf_safety_margin_pct": -82.4}},
+            },
+        },
+    }
+    dims = {"fundamental_score": 66.8, "dimensions": {}}
+    os.environ["UZI_SCHOOL"] = "I"
+    try:
+        syn = generate_synthesis(raw, dims, panel)
+        debate = syn["debate"]
+        assert debate["bull"]["investor_id"] == "serenity"
+        assert debate["bear"]["investor_id"] == "__counter_thesis__"
+        assert debate["bull"]["investor_id"] != debate["bear"]["investor_id"]
+    finally:
+        os.environ.pop("UZI_SCHOOL", None)
+
+
 # ─── issue #72 · 具身智能 / 人形机器人卡位链 ──────────────────────
 
 def test_embodied_ai_harmonic_reducer_bullish():

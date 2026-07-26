@@ -1040,6 +1040,34 @@ def generate_synthesis(raw: dict, dims_scored: dict, panel: dict, agent_analysis
     if bull.get("investor_id") == bear.get("investor_id") and len(inv_by_score) > 1:
         bear = inv_by_score[-2]
 
+    # v3.8.1 · --school I 等单评委锁定：只剩 1 位非 skip 评委时 bull==bear。
+    # 用 fail 规则 + DCF 空方案合成 counter_thesis，避免 debate self-review critical。
+    if bull.get("investor_id") == bear.get("investor_id") and bull.get("investor_id"):
+        solo = bull
+        fail_msgs = [
+            r.get("msg") or r.get("name") or ""
+            for r in (solo.get("fail") or [])
+            if isinstance(r, dict) and (r.get("msg") or r.get("name"))
+        ]
+        d20_early = (raw.get("dimensions", {}).get("20_valuation_models") or {}).get("data") or {}
+        dcf_sm = (d20_early.get("summary") or {}).get("dcf_safety_margin_pct") or 0
+        bear_parts: list[str] = []
+        if fail_msgs:
+            bear_parts.append(str(fail_msgs[0])[:120])
+        if dcf_sm and dcf_sm < -10:
+            bear_parts.append(f"DCF 安全边际 {dcf_sm:.0f}%")
+        bear = {
+            "investor_id": "__counter_thesis__",
+            "name": "空方论证",
+            "group": solo.get("group"),
+            "signal": "bearish",
+            "score": max(10, min(50, 100 - solo.get("score", 50))),
+            "headline": " · ".join(bear_parts) if bear_parts else "风险因素仍需关注",
+            "reasoning": "",
+            "pass": [],
+            "fail": solo.get("fail") or [],
+        }
+
     # v2.6 · Sanity warnings: signal vs score 矛盾时打印（不阻断流程）
     def _check_signal_score(inv: dict, role: str) -> None:
         sig = inv.get("signal", "")
