@@ -1,9 +1,79 @@
 # BUGS-LOG · 防回归记录
 
 每个 bug 修完都登记到这里。**未来改这些代码区域时，必须回看本文件确保不引入回归。**
-对应单元测试在 `skills/deep-analysis/scripts/tests/test_no_regressions.py` + `tests/test_v2_10_4_fixes.py` + `tests/test_v2_11_scoring_calibration.py` + `tests/test_v2_12_1_data_fixes.py` + `tests/test_v2_13_playwright_strategy.py`。
+对应单元测试在 `skills/deep-analysis/scripts/tests/test_no_regressions.py` + `tests/test_v2_10_4_fixes.py` + `tests/test_v2_11_scoring_calibration.py` + `tests/test_v2_12_1_data_fixes.py` + `tests/test_v2_13_playwright_strategy.py` + `tests/test_v3_9_2_flow_bugfixes.py`。
 
 **登记规范**：每条必含 症状 / 位置 / 根因 / 影响 / 修法 / 验证 / 回归测试 / "未来改该区域注意事项"
+
+---
+
+## v3.9.2 (2026-07-07 · 流程与数据契约 hotfix · issue #82/#83)
+
+### BUG · OCF 缺失、industry=None、CLI report 后处理早退、agent_analysis 坏结构继续合并
+
+- **症状**：
+  1. [#82](https://github.com/wbh604/UZI-Skill/issues/82) · `fetch_financials` 只把经营现金流写成 `fcf`，没有显式 `ocf` / `ocf_history` / `ocf_to_net_income_ratio`，A 股 trap-detector 的现金利润匹配规则会读不到真实 OCF。
+  2. [#83](https://github.com/wbh604/UZI-Skill/issues/83) · `basic.industry=None` 时 `fetch_peers` 整个 A 股分支跳过，返回空同行表且 `fallback=False`；`fetch_valuation` 也直接丢行业/市场 PE。
+  3. fund/ETF/LOF 持仓汇总、`--versus`、`--portfolio` 生成 HTML 后直接 `sys.exit(0)`，绕过 `--output-dir` / `--remote` / 浏览器打开。
+  4. `agent_analysis.json` schema error 只打印 `_agent_analysis_errors.json`，但仍传给 `generate_synthesis`，坏结构可能污染报告或触发 `.get()` 异常。
+- **位置**：
+  - `fetch_financials.py` 现金流段
+  - `fetch_peers.py` A 股 `industry` 分支
+  - `fetch_valuation.py` cninfo 行业 PE 段
+  - `run.py` CLI 分支和 remote 后处理
+  - `run_real_test.py::stage2`
+  - `lib/pipeline/fetchers/registry.py`
+- **根因**：
+  - 数据契约漂移：legacy fetcher 输出 `financial_health` / `pe_quantile`，registry 却期待顶层 `debt_ratio/current_ratio` / `pe_ttm/pe_percentile`。
+  - 控制流分散：多报告模式各自早退，没有共享 report post-process。
+  - schema validator 只写错误清单，没有把 error 级问题转成 fallback。
+- **影响**：
+  - 现金流质量被默认值掩盖，可能把 OCF/净利大幅背离的股票误判为通过。
+  - 行业缺失时报告同行/估值区块空白但不标 fallback。
+  - SaaS/远程查看模式在 fund/versus/portfolio 下失效。
+  - 非 Claude/Codex 生成的坏 `agent_analysis.json` 可能导致 stage2 崩溃或错用用户覆盖字段。
+- **修法**：
+  1. `fetch_financials._apply_operating_cash_flow` 显式输出 OCF 字段；`stock_features` 读取 `ocf_to_net_income_ratio`。
+  2. `fetch_peers` 在 industry 缺失时 self-only fallback，并写 `fallback_reason`。
+  3. `fetch_valuation` 在 industry 缺失/未匹配时用 cninfo 市场加权 PE 兜底，并写 `industry_pe_fallback_reason`。
+  4. pipeline registry 对齐 legacy 输出字段。
+  5. `run.py` 抽出 direct report path + shared post-process，fund summary / versus / portfolio 均复用 `--output-dir` / `--remote`；`cloudflared` 缺失时默认只提示，显式 `--install-cloudflared` 才自动安装。
+  6. `run_real_test._validate_agent_analysis_or_fallback` 对 error 级 schema issue 直接丢弃 payload，回退脚本骨架。
+- **验证**：新增 `tests/test_v3_9_2_flow_bugfixes.py`，覆盖 8 个回归。
+- **未来改该区域注意事项**：
+  - 新增/改名 fetcher 字段时，同步更新 `lib/pipeline/fetchers/registry.py`，并加行为测试，不只 grep 源码。
+  - 所有“生成 HTML 的 CLI 模式”都必须返回 report path 并进入统一 post-process；不要再在 runner 分支里直接 `sys.exit(0)`。
+  - `cloudflared` / `brew` / `sudo` 属于系统变更，默认只提示，必须显式 opt-in。
+
+## v3.8.1 (2026-06-09 · 全面体检 · H/I 两组配套层 6 处补齐)
+
+### BUG · 加评委没加配套 · 6 个静默降级缺陷
+
+- **症状**：v3.6.3 (Serenity I 组) / v3.7.0 (13 位科技大佬 H 等组) 上线后 · 报告中
+  ① 14 位新评委头像破图 ② 流派评分卡永远只显示 7 派（H/I 静默消失）③ H/I 组标签
+  显示裸字母 ④ H/I 评委的 time_horizon/position_sizing 全 "—" ⑤ 风格动态加权对
+  H/I 失效 ⑥ 新评委群聊台词全是 generic 套话
+- **根因**：加评委只改了 investor_db + investor_criteria · 但仓库里有 **6 处按组
+  遍历/查表的硬编码 A-G 配套层** · 全部用 `.get(g, default)` 优雅降级 → 不崩 ·
+  所以 CI 全绿 · 视觉缺陷一直没暴露
+- **修法**：
+  1. `gen_pixel_avatars.py` 重跑 → 补 14 头像（脚本本身就支持增量 · 之前没人跑）
+  2. `special_cards.render_school_scores` order A-G → A-I
+  3. `panel_cards.GROUP_LABELS` + `special_cards` 内联副本 → 补 H/I
+  4. `investor_profile.GROUP_DEFAULT` → 补 H/I 流派档案
+  5. `stock_style.STYLE_GROUP_WEIGHTS` 8 风格 × 补 H/I 列
+  6. `MARKET_SCOPE` 13 人显式登记 + `PERSONAS` 13 人 voice 台词
+- **验证**：10 个体检回归测试 (`test_v3_8_1_audit_fixes.py`) · 632 passed
+- **未来改该区域注意事项**（防再犯 · 关键）：
+  - **加新评委的 checklist**（缺一不可）：investor_db → investor_criteria →
+    `gen_pixel_avatars.py` 重跑 → MARKET_SCOPE → PERSONAS 台词 → 若新增组：
+    GROUP_LABELS ×2 / render_school_scores order / GROUP_DEFAULT /
+    STYLE_GROUP_WEIGHTS / SCHOOL_LABELS / run.py --school choices /
+    _render_school_lock_banner THEMES / score_fns GROUP_META
+  - 体检测试 `test_v3_8_1_audit_fixes.py` 已把以上大部分变成硬断言 ·
+    新加组时这些测试会先红 · 跟着修就不会漏
+  - 不要依赖 `.get(g, 1.0)` 这类优雅降级当"没问题"的证据 —— 它恰恰是
+    本次 6 个缺陷能潜伏两个版本的原因
 
 ---
 

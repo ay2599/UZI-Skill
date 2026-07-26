@@ -386,7 +386,8 @@ def render_panel_insights(syn: dict, panel: dict) -> str:
             grp_stance.setdefault(g, Counter())[inv.get("signal", "?")] += 1
         grp_summary = []
         GROUP_LABELS = {"A": "价值派", "B": "成长派", "C": "宏观派", "D": "技术派",
-                        "E": "中国价投", "F": "A 股游资", "G": "量化"}
+                        "E": "中国价投", "F": "A 股游资", "G": "量化",
+                        "H": "科技领袖派", "I": "AI 卡位猎手"}  # v3.8.1 · 补 H/I
         for g in sorted(grp_stance.keys()):
             c = grp_stance[g]
             dominant = c.most_common(1)[0] if c else (("—", 0))
@@ -446,7 +447,8 @@ def render_school_scores(syn: dict, panel: dict) -> str:
     SIG_ICON = {"bullish": "📈", "bearish": "📉", "neutral": "⚖️", "skip": "—"}
 
     # 按 group 字母顺序排列（A-G）· 保留顺序稳定
-    order = ["A", "B", "C", "D", "E", "F", "G"]
+    # v3.8.1 · 补 H(科技领袖派)/I(Serenity) · 之前漏了 → 两派分数永远不渲染
+    order = ["A", "B", "C", "D", "E", "F", "G", "H", "I"]
     items = []
     for g in order:
         s = school.get(g)

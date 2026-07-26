@@ -1,7 +1,7 @@
 ---
 name: investor-panel
-description: 50 位投资大佬评审团。给定一只股票的 dimensions.json 和 raw_data.json，让 50 位投资者各自按自己的方法论打分并输出 Pydantic Signal（signal/confidence/score/verdict/comment）。覆盖经典价值派、成长投资派、宏观对冲派、技术趋势派、中国价投派、A股游资派、量化系统派 7 大流派。当用户请求"评审团/50 大佬怎么看/某某会买吗/做一次大佬投票"时使用。
-version: 3.7.1
+description: 65 位投资大佬评审团。给定一只股票的 dimensions.json 和 raw_data.json，让 65 位投资者各自按自己的方法论打分并输出 Pydantic Signal（signal/confidence/score/verdict/comment）。覆盖经典价值派、成长投资派、宏观对冲派、技术趋势派、中国价投派、A股游资派、量化系统派、科技领袖派、AI 卡位猎手 9 大流派。当用户请求"评审团/65 大佬怎么看/某某会买吗/做一次大佬投票"时使用。
+version: 3.9.2
 author: FloatFu-true
 license: MIT
 metadata:
@@ -17,7 +17,7 @@ metadata:
 读取以下输入：
 - `.cache/{ticker}/dimensions.json` — 19 维评分
 - `.cache/{ticker}/raw_data.json` — 原始数据
-- `scripts/lib/investor_db.py` — 50 人元数据
+- `scripts/lib/investor_db.py` — 65 人元数据
 - `scripts/lib/seat_db.py` — 22 位游资射程规则
 
 输出：

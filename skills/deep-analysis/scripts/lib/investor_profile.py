@@ -162,6 +162,12 @@ PROFILES: dict[str, dict[str, str]] = {
         "position_sizing": "极度集中 + 约 1.3-1.4x margin，最高信念的卡点敢满仓重押；不在链上的一律 0 仓",
         "what_would_change_my_mind": "卡位被证伪（出现可替代方案 / 新增产能放量）· 供给从紧转松 · 下游 roadmap 绕过该节点 · 估值已反映瓶颈、信息差消失",
     },
+    "ghzw": {  # v3.9.0 · 股海贼王 · 数据来自其十年实盘 (8951 笔交割单)
+        "time_horizon": "超短接力 T+1 到 T+5（持仓中位 1 天）· 时代级格局票可拿数月看三五倍",
+        "position_sizing": "同时 3-5 只 · 第一重仓常打五成 · 闲钱逆回购 · 高位票绝不满仓搞",
+        "what_would_change_my_mind": "主线退潮 · 弱转强失败/盘口承接消失 · 大盘系统性风险（自认十年最大弱项 · 赚 15 个点就休息）",
+    },
+
 }
 
 
@@ -205,6 +211,17 @@ GROUP_DEFAULT: dict[str, dict[str, str]] = {
         "time_horizon": "由模型决定，通常数天到数周",
         "position_sizing": "等权或风险平价分散，单票权重由模型算",
         "what_would_change_my_mind": "因子 IC 衰减 · Sharpe 下降 · 市场微观结构改变",
+    },
+    # v3.8.1 · 补 H/I（之前缺失 → H/I 评委 profile 落到 GENERIC_FALLBACK 全是 "—"）
+    "H": {  # 科技领袖派（黄仁勋/马斯克/Altman/Saylor · 看自家产业链）
+        "time_horizon": "5-10 年技术周期，跟随平台迁移（AI/EV/AGI/数字资产）",
+        "position_sizing": "极度集中——All in 自己看得最清的产业链节点",
+        "what_would_change_my_mind": "技术路线被颠覆 · scaling 失效 · 产业链节点被绕过",
+    },
+    "I": {  # AI 卡位/瓶颈猎手（Serenity）
+        "time_horizon": "6-24 个月，从市场未定价埋伏到瓶颈被公认",
+        "position_sizing": "高信念集中重仓 1-3 只卡点小盘，确认错了立即清仓",
+        "what_would_change_my_mind": "替代方案量产 · 产能瓶颈解除 · 卡点被市场充分定价",
     },
 }
 

@@ -26,7 +26,8 @@ def _safe(v, default="—"):
     return v
 
 
-GROUP_LABELS = {"A": "价值", "B": "成长", "C": "宏观", "D": "技术", "E": "中国", "F": "游资", "G": "量化"}
+GROUP_LABELS = {"A": "价值", "B": "成长", "C": "宏观", "D": "技术", "E": "中国", "F": "游资", "G": "量化",
+                "H": "科技", "I": "卡位"}  # v3.8.1 · 补 H/I (之前 H/I 评委显示裸字母)
 
 
 def render_jury_seat(inv: dict) -> str:

@@ -78,13 +78,35 @@ MARKET_SCOPE: dict[str, str] = {
     "mao_lb": "A", "xiao_xian": "A", "lasa": "A", "chengdu": "A",
     "sunan": "A", "ningbo_st": "A", "liuyi_zl": "A", "liu_sh": "A",
     "gu_bl": "A", "wang_zr": "A", "xin_dd": "A",
+    "ghzw": "A",            # v3.9.0 · 股海贼王 · 淘股吧实盘 · 接力/打板只在 A 股 T+1 生态有效
 
     # Group G · Quant — 全球
     "simons": "all",
     "thorp": "US",
     "shaw": "all",
+    "asness": "all",          # v3.8.1 · AQR 因子(价值×质量×动量)是数学 · 全球通用
 
-    # Group H · AI 卡位/瓶颈猎手 — 主战场美股，但 AI 供应链卡点逻辑全球通用
+    # Group B 新晋 VC (v3.7.0 · v3.8.1 显式登记) — 主战场美股 · 软件/平台方法论全球通用
+    "andreessen": "all",      # "Software eats the world" 不分市场
+    "gurley": "all",          # marketplace/unit economics 框架全球通用
+    "naval": "all",           # 杠杆/复利哲学全球通用
+    "gerstner": "all",        # Altimeter 实际持过美团/拼多多 · 全球科技视野
+    "chamath": "all",         # disruptor thesis 全球通用
+
+    # Group C 做空猎手 (v3.7.0) — 估值泡沫/会计造假判断全球通用
+    "burry": "all",           # 价值+逆向是数学 · 也做过中概 ADR
+    "chanos": "all",          # 会计质量分析全球通用 · 历史空过中概
+
+    # Group E 高瓴 (v3.7.0)
+    "zhang_lei": "all",       # 腾讯(HK)/京东(US)/宁德(A) 全市场布局
+
+    # Group H · 科技领袖派 (v3.7.0) — 看的是自家产业链 · 上下游横跨 A/H/U
+    "jensen_huang": "all",    # AI 算力链供应商遍布 TW/KR/CN/US (A 股光模块在视野内)
+    "musk": "all",            # EV/电池链大量 A 股供应商
+    "altman": "all",          # AGI 供应链(算力/能源)全球
+    "saylor": "all",          # BTC/数字资产叙事不分市场
+
+    # Group I · AI 卡位/瓶颈猎手 — 主战场美股，但 AI 供应链卡点逻辑全球通用
     "serenity": "all",
 }
 

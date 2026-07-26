@@ -1,5 +1,5 @@
 ---
-description: 完整深度分析一只股票（22 维数据 + 52 位大佬量化评委 + 17 种机构分析方法 + 杀猪盘检测 + Bloomberg 风格 HTML 报告）
+description: 完整深度分析一只股票（22 维数据 + 65 位大佬量化评委 + 17 种机构分析方法 + 杀猪盘检测 + Bloomberg 风格 HTML 报告）
 argument-hint: "[股票名称或代码，例如 华工科技 / 002273 / AAPL / 00700.HK]"
 ---
 
@@ -43,7 +43,7 @@ if low_quality_dims:
 
 **1. 读取评委骨架分**
 
-读 `.cache/{ticker}/panel.json`，看 52 人各自打了多少分。特别关注：
+读 `.cache/{ticker}/panel.json`，看 65 人各自打了多少分。特别关注：
 - Top 5 看多和 Top 5 看空分别是谁？他们的 headline 有没有说服力？
 - 有多少人 skip 了？（非 A 股时游资会 skip）
 - 有没有明显不合理的分数？
@@ -146,7 +146,7 @@ agent_analysis.json 中的字段优先级高于脚本 stub。
 ### 第四段 · 向用户汇报
 
 1. 综合评分 + 定调
-2. 52 评委投票分布
+2. 65 评委投票分布
 3. DCF 内在价值 vs 当前价
 4. Top 3 看多理由 + Top 3 看空理由
 5. Great Divide 金句

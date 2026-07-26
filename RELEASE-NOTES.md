@@ -1,5 +1,127 @@
 # Release Notes
 
+## v3.9.1 — 2026-06-23 (HTML 报告导航栏可折叠 · issue #79)
+
+### ✨ 新增 · 左侧导航栏折叠/展开
+
+社区 issue [#79](https://github.com/wbh604/UZI-Skill/issues/79)（@QKioi）：v3.6.0 加的左侧 sticky 章节导航栏会略微遮挡正文，希望能收起。本次按建议实现：
+
+- 导航栏顶部新增一个折叠按钮（沿用 `theme-toggle` 的玻璃拟态风格）
+- 展开态显示 `◀`，点一下收起成一个小圆把手（只剩 `☰` 图标，items 全藏，不再压住正文）；再点一下展开
+- 折叠状态写入 `localStorage`（key `uzi-toc-collapsed`），刷新/换页记忆，与暗色模式同一套持久化模式
+- 全程安全 DOM（`textContent` / `classList`，无 `innerHTML`）· 同步 `aria-expanded` / `aria-label` 可访问性
+
+### 🧪 测试
+
+7 个新回归（按钮 markup 在 rail 内 + aria + 折叠态 CSS 隐藏 items + localStorage 读写 + click 切换 + 无 innerHTML）· **649/649 全过**
+
+---
+
+## v3.9.0 — 2026-06-11 (新评委「股海贼王」· 首位从真实交割单蒸馏的评委)
+
+### ✨ 背景 · 用户提供十年实盘数据
+
+用户的「我是大经理」项目从淘股吧实盘帖提取了完整数据：**3898 张持仓截图 OCR → 8951 笔反推交割单**（2016-02-21 → 2026-06-05）+ **5069 条论坛发言**（70+ 条长文复盘）。本次将其蒸馏为 F 组第 24 位评委 `ghzw` —— **与其他评委的本质区别：规则阈值不是来自书本/访谈归纳，而是来自其真实交易行为统计**。
+
+### 📊 定量画像（完整见 `docs/ghzw-dossier.md`）
+
+| 指标 | 值 |
+|---|---|
+| 资产轨迹 | 33 万 → **3131 万**（~95 倍 / 10 年 · 2018 曾回撤至 ~11 万）|
+| 持仓周期 | **中位 1 天** · 均值 3.5 天 · P75 3 天（教科书超短接力）|
+| 同时持仓 | 3-5 只 · **第一重仓中位 51%** · P95 全仓一只 |
+| 广度 | 10 年 **2010 只票** 题材轮动 · 高频标的全是妖股（鸿博/川能/人民网/大众交通）|
+| 现金管理 | 闲钱必逆回购（标准券/R-001 高频）|
+
+### 🧠 方法论蒸馏（风格提炼 · 不逐字转载原帖）
+
+- **复盘三问**：为什么涨停 / 在板块什么地位 / 在大盘什么地位
+- **接力纪律**：弱转强快速板才算超预期 · 盘面确认强度 · 竞争板胜率低不满仓赌
+- **选股**：只做当期最强主线 · 逻辑硬的低位票爆发力足
+- **格局票**：能看三五倍空间就不恐高，把代表标的当时代主题的"情绪载体"
+- **操守**：反复强调不跟单、不收费、做"纯粹的股者"
+
+> 原始交割单 / 持仓截图 / 论坛发言原文均为本地数据，**未纳入本仓库、不逐字转载**，仅蒸馏风格与行为统计。
+
+### 🔧 落地（按 v3.8.1「加评委 checklist」全项执行）
+
+- `investor_db` F 组 flagship（65→66）· `investor_criteria` 6 条数据驱动规则 · `MARKET_SCOPE="A"` · `PERSONAS` 台词全部改写自原帖 · `PROFILES` 手写档案（数据口径）· 头像生成 · quotes-knowledge-base 带楼层溯源段落 · `docs/ghzw-dossier.md` 完整档案
+- **行为复刻实测**：鸿博式妖股（主线+涨停基因+低位+Stage2）→ bullish 100（他 2023 年真做过 22 次）· 茅台白马 → bearish 9.5（"逆主线=送钱"）· 美股 → skip
+
+### 🧪 测试
+
+10 个新回归（注册完整性按 checklist 全项 + 行为复刻 + 射程不误杀 + dossier 溯源）· **642/642 全过**
+
+---
+
+## v3.8.1 — 2026-06-09 (skills 全面体检 · H/I 两组配套层 6 处补齐)
+
+### 🩺 背景 · 全面体检发现"加人没加配套"
+
+v3.6.3 加 Serenity (I 组)、v3.7.0 加 13 位科技大佬 (B/C/E/G/H 组) 时，**只更新了 investor_db + 规则**，多处按组遍历/查表的配套层漏了 H/I —— 都是静默降级（不崩但功能缺失），所以一直没暴露。
+
+### 🐛 修复的 6 个 bug
+
+| # | 位置 | 症状 | 修复 |
+|---|---|---|---|
+| 1 | `assets/avatars/` | **14 位新评委无头像 SVG** → 报告评委席/群聊/世纪分歧全是破图 | 跑 `gen_pixel_avatars.py` 补 14 个 · 总 65 |
+| 2 | `special_cards.render_school_scores` | `order=[A..G]` → **H/I 两派分数永远不渲染**（报告"流派评分"卡片静默丢 2 派）| order 扩到 A-I |
+| 3 | `panel_cards.GROUP_LABELS` ×2 处 | H/I 评委组标签显示裸字母 "H"/"I" | 补 "科技"/"卡位" 标签 |
+| 4 | `investor_profile.GROUP_DEFAULT` | H/I 评委 profile 落 GENERIC_FALLBACK → 报告里 time_horizon 等全是 "—" | 补 H/I 流派级档案 |
+| 5 | `stock_style.STYLE_GROUP_WEIGHTS` | H/I 在全部 8 种风格下吃默认 1.0 → **v2.7 风格动态加权对两组失效** | 8 风格 × H/I 补权重（I 在红利股 0.2 · 科技成长 1.5）|
+| 6 | `investor_knowledge.MARKET_SCOPE` + `investor_personas.PERSONAS` | 13 新评委缺显式 scope（靠隐式默认）+ 缺台词（群聊全是 generic fallback 套话）| 13 人显式登记 "all" + 各写 voice 台词（Naval 的杠杆哲学 / Burry 的 "I may be early" / 黄仁勋的 "The more you buy..." / Saylor 的法币融化 等）|
+
+### 📝 文档同步（~35 处）
+
+- `deep-analysis/SKILL.md` 25 处 + `investor-panel/SKILL.md` 5 处 + `commands/` 6 处：51/52 评委 → 65 · 7 大流派 → 9 · 180 条规则 → 236 · group-{a..g} → {a..i} · `--school` A-G → A-I
+- persona 段落精确化：51 位有 YAML（12 flagship + 39 stub）· 13 位新晋由台词库 + Rules 驱动
+
+### 🧪 测试
+
+- 10 个新体检回归测试（全员头像 / school_scores 渲染 H+I / GROUP_LABELS / profile / 风格权重 / scope / 台词渲染 / 文档计数）
+- **632/632 全过**
+
+---
+
+## v3.8.0 — 2026-06-08 (Tier-1 5 方法 + Serenity 严谨化 + 技术指标/杜邦扩展)
+
+### ✨ Feature · 从 `anthropics/financial-services` 续引入 5 个与个股研究强相关的方法
+
+继 v2.0.0 首批引入 17 种机构方法后，本次对照上游仓库做差距分析，引入 Tier-1 的 5 个新方法（全部适配 A 股/港股/美股，纯函数 + `methodology_log`，放在新包 `lib/tier1/`）。卖方 IB（CIM/teaser/buyer-list）、基金后台（fund-admin/月结/GL 对账）、合规（KYC）等超出散户个股定位的内容**有意不引入**。
+
+| 命令 | 方法 | 说明 |
+|---|---|---|
+| `/ai-readiness` | `build_ai_readiness` | 单票 **AI 就绪度/卡位评估** — 复用 Serenity 的 `ai_chokepoint_score`，3 道 gate（在链/真实需求/不可替代）→ Go/Wait + AI 杠杆点 + 评级（强/中/弱/无） |
+| `/earnings-preview` | `build_earnings_preview` | **财报前**预览 — 一致预期 + 按行业的关注指标 + Bull/Base/Bear 情景 + 催化清单 + 隐含波动（补 `/earnings` 的财报后解读） |
+| `/model-update` | `build_model_update` | 新财报/指引**增量更新模型** — 假设 before→after delta + 对 DCF 内在价值/Comps 隐含价/thesis 支柱的影响 + 更新后 verdict |
+| `/returns` | `build_returns_attribution` | 二级市场组合**收益归因** — 按持仓/行业拆解总收益 + Top 贡献/拖累（配 `--portfolio`） |
+| `/rebalance` | `build_rebalance` | 逐持仓**再平衡** — 漂移 + 交易清单 + **本地化换手成本**（A 股印花税 0.05%/佣金、港股 0.1%、美股≈0）；A 股个人无资本利得税故**不做 TLH** |
+
+**实测**：用真实数据（水晶光电 002273）跑 `build_ai_readiness` → 评级「中」/卡位 70/Wait，与 Serenity 对该票的 neutral 判定一致。
+
+**改动**：新增 `lib/tier1/`（5 模块 + `__init__.py`）、5 个 `commands/*.md`、5 个 `references/fin-methods/*.md`、5 个测试文件（46 个新用例）。`fin-methods/README.md` 登记 Tier-1 表。未改动既有方法与评委体系。`/rebalance`（逐持仓+换手成本）与既有 `build_portfolio_rebalance`（资产大类配置）分工互补。
+
+46 个新回归测试 · 总 **579 passed**。
+
+### ✨ Feature · 参考三个社区仓库优化 Serenity + 数据/指标（参考 `lolifamily/ashare-mcp` · `ZhuLinsen/daily_stock_analysis` · `muxuuu/serenity-skill`）
+
+对照三个外部仓库做差距分析，落地 5 项改进：
+
+**Serenity 角色严谨化（参考 `muxuuu/serenity-skill`）—— 不再"只会看多"：**
+1. **8 罚分因子** `ai_penalties`：炒作无订单 / 微盘流动性 / 杀猪盘 / 治理质押 / 周期性 / 替代设计 / 地缘(无国产替代) / 稀释 → 卡位再硬踩雷也减分（封顶 60% 折扣），呼应 dossier 的"拉高出货嫌疑"
+2. **证据阶梯（3 级）** `ai_evidence_grade`：强(公告/财报/定点/量产/认证/专利)×1.0 > 中(权威媒体/卖方)×0.85 > 弱(KOL/论坛/纯叙事)×0.70。**每标的需 ≥1 强/中证据**否则打七折 —— 同一卡位点"有定点/量产"≈90 分 vs"仅题材"≈60 分
+3. **供应链 8 层分层** `ai_chain_tier`：材料(1.0)>制程封装>设备测试>芯片器件>基建>模块>系统集成>下游需求(0.4)，越上游瓶颈分越高
+
+**数据/指标扩展（参考 `ashare-mcp` 指标广度）：**
+4. **DuPont 杜邦分解**：ROE = 净利率 × 总资产周转 × 权益乘数 + `roe_quality`(margin_driven/leverage_driven/balanced) → 价值派(巴菲特/张磊)看 ROE 质量来源
+5. **KDJ / OBV / Williams%R**：从 kline 本地计算 → 给 D 技术派评委加料 · 报告 K 线卡片新增副指标徽章
+
+> `daily_stock_analysis` 的多渠道推送 / X 社交情绪暂未引入（产品形态不同 / 需 API auth），留作后续。
+
+15 个新回归测试（Serenity 罚分·证据·分层 + DuPont + KDJ/OBV/Williams）· 总 **622 passed**。
+
+---
+
 ## v3.7.1 — 2026-06-04 (README 首页补 Serenity 介绍 + `--school H/I` 放开)
 
 ### 🐛 用户反馈 · README 没把 Serenity 写清楚
