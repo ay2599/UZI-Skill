@@ -52,3 +52,10 @@ docs/*.local.md
 
 # v2.10.2 · prewarm_cache 生成的预热数据（release 附件，不进 repo）
 skills/deep-analysis/scripts/prewarm/
+
+# Market recap · 运行时抓取产物 / 浏览器调试（脚本与 md 归档可入库）
+market_data_today.json
+_fetch_quotes_out.json
+_holdings_quotes.json
+_recap_extra.json
+.playwright-mcp/
