@@ -54,6 +54,7 @@ UZI-Skill/                                  # ← 你 cwd 应该是这里
 | 强制老路径 (保险) | `UZI_LEGACY=1 python run.py <ticker>` |
 | 只跑单个 fetcher | `cd skills/deep-analysis/scripts && python fetch_basic.py <ticker>` |
 | 跑全量 pytest | `cd skills/deep-analysis/scripts && pytest tests/ -q` |
+| 每日市场复盘 | `python skills/market-recap/scripts/get_market_recap.py` 再 `generate_recap_stub.py`（触发词：复盘/盘后） |
 | Python 环境 | 任意装了 akshare/pytest 的 Python 3.10+（macOS 系统 `/usr/bin/python3` 通常缺这些 · 用 `pip install -r requirements.txt` 装；conda / venv / pyenv 都行） |
 
 ### 内部模块调用约定

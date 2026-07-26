@@ -10,7 +10,8 @@
     "skills/deep-analysis/SKILL.md",
     "skills/investor-panel/SKILL.md",
     "skills/lhb-analyzer/SKILL.md",
-    "skills/trap-detector/SKILL.md"
+    "skills/trap-detector/SKILL.md",
+    "skills/market-recap/SKILL.md"
   ],
   "patterns": {
     ".claude-plugin/plugin.json": "\"version\": \"VERSION\"",
@@ -22,6 +23,7 @@
     "skills/deep-analysis/SKILL.md": "version: VERSION",
     "skills/investor-panel/SKILL.md": "version: VERSION",
     "skills/lhb-analyzer/SKILL.md": "version: VERSION",
-    "skills/trap-detector/SKILL.md": "version: VERSION"
+    "skills/trap-detector/SKILL.md": "version: VERSION",
+    "skills/market-recap/SKILL.md": "version: VERSION"
   }
 }
